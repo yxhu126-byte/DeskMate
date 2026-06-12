@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>桌面伴侣 — AI 多模态伴随助手</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ═══════════════ 顶部状态栏 ═══════════════ -->
+  <header class="top-bar">
+    <span class="app-title">🖥️ 桌面伴侣</span>
+    <div class="status-indicators">
+      <div class="status-item">
+        <span class="status-dot inactive" id="backendIndicator"></span>
+        <span id="backendStatus">检查中...</span>
+      </div>
+      <span style="color:#444;">|</span>
+      <div class="status-item">
+        <span class="status-dot inactive" id="cameraIndicator"></span>
+        <span>摄像头: <span id="cameraStatus" class="status-off">关闭</span></span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot inactive" id="screenIndicator"></span>
+        <span>屏幕: <span id="screenStatus" class="status-off">关闭</span></span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot inactive" id="micIndicator"></span>
+        <span>麦克风: <span id="micStatus" class="status-off">关闭</span></span>
+      </div>
+      <span style="color:#444;">|</span>
+      <span class="last-sources" id="lastUsedSources"></span>
+    </div>
+  </header>
+
+  <!-- ═══════════════ 主内容区 ═══════════════ -->
+  <div class="main-content">
+
+    <!-- ── 左侧面板 ── -->
+    <aside class="side-panel">
+
+      <!-- 场景模式 -->
+      <div class="panel-section">
+        <h3>🎯 场景模式</h3>
+        <div class="mode-selector">
+          <button class="mode-btn active" data-mode="general">🌐 通用</button>
+          <button class="mode-btn" data-mode="learning">📚 学习</button>
+          <button class="mode-btn" data-mode="office">💼 办公</button>
+          <button class="mode-btn" data-mode="coding">💻 编程</button>
+        </div>
+      </div>
+
+      <!-- 输入源控制 -->
+      <div class="panel-section">
+        <h3>📡 输入源控制</h3>
+        <div class="control-group">
+          <div class="control-row">
+            <button class="control-btn" id="cameraBtn">
+              <span class="btn-icon">📷</span>
+              <span class="btn-label">摄像头</span>
+            </button>
+            <button class="control-btn" id="screenBtn">
+              <span class="btn-icon">📺</span>
+              <span class="btn-label">屏幕共享</span>
+            </button>
+          </div>
+          <div class="control-row">
+            <button class="control-btn" id="micBtn">
+              <span class="btn-icon">🎤</span>
+              <span class="btn-label">麦克风</span>
+            </button>
+            <button class="control-btn" id="recordBtn">
+              <span class="btn-icon">🎙️</span>
+              <span class="btn-label">语音输入</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 录音状态 -->
+        <div class="recording-indicator hidden" id="recordingIndicator">
+          <span class="rec-dot"></span> 正在录音...
+        </div>
+
+        <!-- 停止全部 -->
+        <button class="stop-all-btn" id="stopAllBtn">🛑 全部停止</button>
+      </div>
+
+      <!-- 预览区域 -->
+      <div class="panel-section">
+        <h3>👁️ 预览</h3>
+
+        <!-- 屏幕共享预览 -->
+        <div class="preview-container hidden" id="screenPreview">
+          <video id="screenVideo" autoplay muted playsinline></video>
+          <span class="preview-label">📺 屏幕共享</span>
+        </div>
+
+        <!-- 摄像头预览 -->
+        <div class="preview-container hidden" id="cameraPreview">
+          <video id="cameraVideo" autoplay muted playsinline></video>
+          <span class="preview-label">📷 摄像头</span>
+        </div>
+
+        <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;padding:10px;">
+          开启输入源后，预览画面将出现
+        </p>
+      </div>
+
+      <!-- 截图选项 -->
+      <div class="panel-section">
+        <h3>🖼️ 提问时附带</h3>
+        <div class="screenshot-options">
+          <label class="screenshot-option" id="sendScreenOption" style="display:none;">
+            <input type="checkbox" id="sendScreenCheck" checked>
+            📺 附带屏幕截图
+          </label>
+          <label class="screenshot-option" id="sendCameraOption" style="display:none;">
+            <input type="checkbox" id="sendCameraCheck" checked>
+            📷 附带摄像头画面
+          </label>
+        </div>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="panel-section">
+        <div class="panel-actions">
+          <button class="action-btn" id="clearChatBtn">🗑️ 清除对话</button>
+          <button class="action-btn" id="privacyBtn">🔒 隐私说明</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── 右侧聊天区 ── -->
+    <main class="chat-area">
+      <div class="chat-panel" id="chatPanel">
+        <!-- 欢迎页由 JS 动态渲染 -->
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="chat-input-area">
+        <div class="input-row">
+          <textarea
+            class="chat-input"
+            id="chatInput"
+            rows="1"
+            placeholder="输入问题，或点击「语音输入」按钮用语音提问..."
+          ></textarea>
+          <button class="send-btn" id="sendBtn">发送</button>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<!-- ═══════════════ 脚本加载 ═══════════════ -->
+<script src="js/utils.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/screen.js"></script>
+<script src="js/mic.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
