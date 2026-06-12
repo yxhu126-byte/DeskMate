@@ -58,7 +58,7 @@ class SpeechToTextService:
     async def _mock_transcribe(self) -> SpeechTranscribeResponse:
         """Demo 模式: 返回占位文本"""
         return SpeechTranscribeResponse(
-            text="[Demo 模式] 语音转写功能需要配置 OpenAI API Key",
+            text="[演示模式] 语音转写功能需要配置 OpenAI API Key",
             confidence=0.5,
             language="zh",
         )
