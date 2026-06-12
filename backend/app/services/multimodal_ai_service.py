@@ -136,7 +136,7 @@ class MultimodalAIService:
             recent = session_context["recent_messages"][-6:]
             context_parts = ["【最近的对话历史】"]
             for msg in recent:
-                role_label = "用户" if msg["role"] == "user" else "DeskMate"
+                role_label = "用户" if msg["role"] == "user" else "桌面伴侣"
                 context_parts.append(f"{role_label}: {msg['content'][:300]}")
             context_parts.append("【当前问题】")
             content.append({

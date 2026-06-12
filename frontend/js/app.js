@@ -343,7 +343,7 @@ const App = {
     document.getElementById('backendIndicator').className =
       `status-indicator ${this.state.backendOnline ? 'online' : 'offline'}`;
     document.getElementById('backendStatus').textContent =
-      this.state.backendOnline ? '后端已连接' : '后端未连接 (Demo模式)';
+      this.state.backendOnline ? '后端已连接' : '后端未连接（演示模式）';
   },
 
   _updateIndicator(statusId, indicatorId, isOn) {
@@ -381,7 +381,7 @@ const App = {
       console.log(`后端状态: ${health.status === 'ok' ? '✅ 在线' : '❌ 异常'}, 提供商: ${health.ai_provider}`);
     } catch (err) {
       this.state.backendOnline = false;
-      console.warn('后端未连接，将使用 Demo 模式:', err.message);
+      console.warn('后端未连接，将使用演示模式:', err.message);
     }
     this._updateAllStatusIndicators();
   },
