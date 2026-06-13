@@ -150,10 +150,15 @@ const App = {
         textInput.placeholder = '正在转写语音...';
         textInput.disabled = true;
 
-        await ChatManager.sendVoice(audioBlob);
+        const result = await ChatManager.sendVoice(audioBlob);
 
         textInput.placeholder = '输入问题，或点击语音按钮...';
         textInput.disabled = false;
+
+        // 如果是演示模式（返回null），聚焦输入框让用户手动输入
+        if (result === null) {
+          textInput.focus();
+        }
       } else {
         this._showError('录音内容为空，请重试');
       }

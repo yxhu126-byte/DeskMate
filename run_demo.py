@@ -29,7 +29,7 @@ def main():
     print()
     print("  2. 配置 AI API Key (可选):")
     print("     编辑 backend/.env 文件")
-    print("     - 不配置: 使用 Demo 模式 (Mock 回答)")
+    print("     - 不配置: 使用演示模式（模拟回答）")
     print("     - 配置 ANTHROPIC_API_KEY: 使用 Claude")
     print("     - 配置 OPENAI_API_KEY: 使用 GPT-4o")
     print()

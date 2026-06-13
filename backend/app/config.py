@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     IMAGE_QUALITY: int = 75
     IMAGE_FORMAT: str = "JPEG"
 
+    # 火山引擎语音识别 (ASR) 配置
+    # 与火山方舟 API Key 独立，两个 Key 互不冲突：
+    # - OPENAI_API_KEY → 大模型对话
+    # - ASR_APP_ID + ASR_ACCESS_TOKEN → 语音识别
+    ASR_APP_ID: Optional[str] = None         # 语音识别应用 ID
+    ASR_ACCESS_TOKEN: Optional[str] = None    # 语音识别 Access Token
+    ASR_RESOURCE_ID: Optional[str] = None     # 资源 ID，默认使用时长计费
+
     # 会话配置
     MAX_RECENT_MESSAGES: int = 10
     SESSION_TTL_SECONDS: int = 1800  # 30 分钟

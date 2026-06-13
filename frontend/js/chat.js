@@ -78,13 +78,32 @@ const ChatManager = {
       // 先转写
       const transcribeResult = await apiClient.transcribeSpeech(this.sessionId, audioBlob);
 
-      // 更新用户消息为转写文本
-      this._updateLastUserMessage(transcribeResult.text);
+      // 移除临时消息
+      this._removeLoadingMessage(tempMsg);
 
-      // 将语音文本发送给 AI
-      return await this.sendMessage(transcribeResult.text);
+      const transcribedText = (transcribeResult.text || '').trim();
+
+      if (!transcribedText) {
+        // 演示模式：转写结果为空，提示用户手动输入
+        App._showError('语音转写需要 OpenAI API Key，请手动输入问题');
+        return null;
+      }
+
+      // 将转写文本填入输入框，让用户确认后发送
+      const input = document.getElementById('chatInput');
+      input.value = transcribedText;
+      input.focus();
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+
+      // 显示用户消息
+      this._addMessageToUI('user', transcribedText);
+
+      // 自动发送
+      return await this.sendMessage(transcribedText);
     } catch (err) {
-      this._updateLastUserMessage(`❌ 语音转写失败: ${err.message}`);
+      this._removeLoadingMessage(tempMsg);
+      App._showError('语音转写失败，请手动输入问题');
       console.error('语音转写失败:', err);
       throw err;
     }
