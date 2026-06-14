@@ -268,6 +268,7 @@ const App = {
       this._stopFocusTimer();
       this._stopIdleTracking();
       this.state.focus.active = false;
+      document.body.classList.remove('focus-mode-active');
       document.getElementById('focusStatusBarItem').style.display = 'none';
     }
 
@@ -346,9 +347,10 @@ const App = {
     // 关闭设置面板
     this.closeFocusSetup();
 
-    // 更新 UI
+    // 更新 UI — body 级标记
+    document.body.classList.add('focus-mode-active');
     document.getElementById('focusBtn').classList.add('active');
-    document.getElementById('focusBtn').querySelector('.btn-label').textContent = '结束专注';
+    document.getElementById('focusBtn').querySelector('.btn-label').textContent = '⏹ 结束专注';
 
     const statusBarItem = document.getElementById('focusStatusBarItem');
     statusBarItem.style.display = 'flex';
@@ -386,9 +388,10 @@ const App = {
     this.state.focus.lastHash = null;
     this.state.focus.startTime = null;
 
+    document.body.classList.remove('focus-mode-active');
     const focusBtn = document.getElementById('focusBtn');
     focusBtn.classList.remove('active');
-    focusBtn.querySelector('.btn-label').textContent = '开始专注';
+    focusBtn.querySelector('.btn-label').textContent = '🎯 开始专注';
     document.getElementById('focusStatusBarItem').style.display = 'none';
 
     // 获取并展示简报
@@ -716,10 +719,10 @@ const App = {
     const focusBtn = document.getElementById('focusBtn');
     if (this.state.focus.active) {
       focusBtn.classList.add('active');
-      focusBtn.querySelector('.btn-label').textContent = '结束专注';
+      focusBtn.querySelector('.btn-label').textContent = '⏹ 结束专注';
     } else {
       focusBtn.classList.remove('active');
-      focusBtn.querySelector('.btn-label').textContent = '开始专注';
+      focusBtn.querySelector('.btn-label').textContent = '🎯 开始专注';
     }
 
     // 录音按钮
