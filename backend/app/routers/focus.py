@@ -31,7 +31,7 @@ async def focus_tick(request: FocusTickRequest):
         f"hash={request.metadata.frame_hash[:8]}..."
     )
 
-    return focus_service.process_tick(request)
+    return await focus_service.process_tick(request)
 
 
 @router.post("/report", response_model=FocusReportResponse)
@@ -43,4 +43,4 @@ async def focus_report(request: FocusReportRequest):
     时段数据生成结构化的任务简报。
     """
     logger.info(f"[Focus Report] session={request.session_id[:8]}...")
-    return focus_service.generate_report(request.session_id)
+    return await focus_service.generate_report(request.session_id)

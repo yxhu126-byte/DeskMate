@@ -12,6 +12,7 @@ from app.schemas.chat import (
     FocusReportResponse,
     FocusSegment,
 )
+from app.services.multimodal_ai_service import multimodal_ai_service
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ class FocusService:
     # 核心方法：处理一次 tick
     # ═══════════════════════════════════════════════════
 
-    def process_tick(self, request: FocusTickRequest) -> FocusTickResponse:
+    async def process_tick(self, request: FocusTickRequest) -> FocusTickResponse:
         session = self._get_session(request.session_id, request.task)
         session.total_ticks += 1
 
@@ -131,8 +132,8 @@ class FocusService:
 
         session.last_hash = current_hash
 
-        # ── 2. 判断新状态 ──
-        new_status = self._determine_status(session, meta, hash_changed)
+        # ── 2. 判断新状态（AI 增强 + 规则兜底） ──
+        new_status = await self._determine_status(session, request, hash_changed)
 
         # ── 3. 状态转换处理 ──
         if new_status != session.current_status:
@@ -144,8 +145,8 @@ class FocusService:
         else:
             session.consecutive_ticks += 1
 
-        # ── 4. 判断是否需要提醒 ──
-        should_alert, alert_message = self._should_alert(session, meta)
+        # ── 4. 判断是否需要提醒（AI 生成文案 + 模板兜底） ──
+        should_alert, alert_message = await self._should_alert(session, meta)
 
         # ── 5. 内部 AI 备注（PR #5 升级为真实 AI 内容） ──
         ai_note = self._build_ai_note(session, meta)
@@ -167,59 +168,68 @@ class FocusService:
     # 状态判定（规则版本，PR #5 升级为 AI）
     # ═══════════════════════════════════════════════════
 
-    def _determine_status(
+    async def _determine_status(
         self,
         session: FocusSession,
-        meta,
+        request: FocusTickRequest,
         hash_changed: bool,
     ) -> str:
         """
-        状态机核心逻辑。
+        状态机核心逻辑（AI 增强版）。
 
-        规则（非 AI 版本）：
-        - 画面长时间无变化 → AWAY
-        - 画面变化 + 标题包含娱乐关键词 → DISTRACTED
-        - 从 DISTRACTED/AWAY 回来 + 画面变化 + 标题不匹配娱乐 → FOCUSED
-        - 默认保持当前状态
+        策略:
+        1. 画面无变化 → AWAY（规则快速通道，无需 AI）
+        2. 从 AWAY 恢复 → FOCUSED（规则快速通道）
+        3. 画面有变化 → 调用 AI 判断相关性（有 API Key 时）
+           → 规则兜底（mock 模式或无 Key）
         """
+        meta = request.metadata
         current = session.current_status
 
-        # 规则 1: 长时间画面无变化 → 离开
+        # 规则快速通道: 长时间画面无变化 → 离开
         if session.same_hash_count >= SAME_HASH_AWAY_TICKS:
             return "away"
 
-        # 规则 2: 从离开状态恢复
+        # 规则快速通道: 从离开状态恢复
         if current == "away" and hash_changed:
             return "focused"
 
-        # 规则 3: 画面有显著变化 → 判断内容
-        if hash_changed and _is_distraction_title(meta.page_title):
-            # 标题匹配走神关键词 → 走神
-            if current == "focused":
+        # 画面无明显变化 → 保持当前状态
+        if not hash_changed:
+            return current
+
+        # 画面有变化 → AI 判断任务相关度
+        ai_result = await multimodal_ai_service.focus_check_relevance(
+            task=session.task,
+            image_base64=request.screen_frame.data,
+            page_title=meta.page_title,
+        )
+
+        # 缓存 AI 判断结果供后续使用
+        session._last_ai_activity = ai_result.get("activity", "")
+        session._last_ai_confidence = ai_result.get("confidence", 0.5)
+
+        is_related = ai_result.get("related", True)
+        confidence = ai_result.get("confidence", 0.5)
+
+        if is_related:
+            # 与任务相关 → 专注
+            if current == "distracted":
+                return "focused"  # 从走神中恢复
+            return "focused"
+        else:
+            # 与任务不相关 → 走神（高置信度时）
+            if confidence > 0.6 and current == "focused":
                 return "distracted"
-            return current  # 已经是 distracted 就保持
-
-        # 规则 4: 从走神中恢复
-        if current == "distracted" and hash_changed:
-            if not _is_distraction_title(meta.page_title):
-                return "focused"
-
-        # 默认：保持当前状态
-        return current
+            return current  # 低置信度或已在走神，保持不变
 
     # ═══════════════════════════════════════════════════
     # 提醒判断
     # ═══════════════════════════════════════════════════
 
-    def _should_alert(self, session: FocusSession, meta) -> tuple:
+    async def _should_alert(self, session: FocusSession, meta) -> tuple:
         """
-        判断此时是否应提醒用户。
-
-        提醒规则：
-        - 刚进入 DISTRACTED 且连续走神 tick 数达到阈值 → 提醒
-        - 仍在 DISTRACTED 中，距上次提醒 > 冷却时间 → 提醒
-        - 从 AWAY 恢复 → 简短欢迎（不算提醒）
-        - 其他情况 → 不提醒
+        判断此时是否应提醒用户（AI 生成提醒文案）。
         """
         now = time.time()
 
@@ -229,28 +239,30 @@ class FocusService:
 
         # DISTRACTED 提醒
         if session.current_status == "distracted":
-            # 刚进入走神状态（连续 tick = 1）且持续一定次数才提醒
             if session.consecutive_ticks >= DISTRACTED_ALERT_TICKS:
-                # 首次提醒 or 冷却已过
-                task_brief = session.task[:20] + "..." if len(session.task) > 20 else session.task
-                page = meta.page_title or "其他页面"
-                message = (
-                    f"看起来你切到了「{page}」——还记得你的目标吗？\n"
-                    f"📋 {task_brief}\n"
-                    f"要回来继续吗？💪"
+                current_activity = getattr(session, '_last_ai_activity', meta.page_title or '其他页面')
+                distracted_min = round(session.consecutive_ticks * 30 / 60) or 1
+
+                # 调用 AI 生成提醒文案
+                message = await multimodal_ai_service.focus_generate_alert(
+                    task=session.task,
+                    elapsed_minutes=round(
+                        (time.time() - (session.tick_start_time or now)) / 60
+                    ) or 1,
+                    current_activity=current_activity,
+                    distracted_minutes=distracted_min,
                 )
+
                 session.last_alert_at = now
                 session.alert_count += 1
                 return True, message
 
-        # 从 AWAY 恢复 → 简短欢迎
+        # 从 AWAY 恢复 → 简短欢迎（不用 AI，保持简洁）
         if session.current_status == "focused" and session.consecutive_ticks == 1:
-            # 检查上一状态是否为 away（通过 segments 判断）
             if session.segments and session.segments[-1].get("status") == "away":
-                message = "看到你回来了！继续加油～"
                 session.last_alert_at = now
                 session.alert_count += 1
-                return True, message
+                return True, "看到你回来了！继续加油～"
 
         return False, None
 
@@ -291,8 +303,8 @@ class FocusService:
     # 简报生成（骨架，PR #7 完整实现）
     # ═══════════════════════════════════════════════════
 
-    def generate_report(self, session_id: str) -> FocusReportResponse:
-        """生成任务简报"""
+    async def generate_report(self, session_id: str) -> FocusReportResponse:
+        """生成任务简报（AI 增强版）"""
         session = self._sessions.get(session_id)
         if not session:
             return FocusReportResponse(
@@ -305,21 +317,18 @@ class FocusService:
         if session.segments:
             session.segments[-1]["end_time"] = _now_cn()
 
-        # 统计各状态时长（简化：按 segment 数量估算分钟数）
-        focused_segments = [s for s in session.segments if s["status"] == "focused"]
-        distracted_segments = [s for s in session.segments if s["status"] == "distracted"]
-        away_segments = [s for s in session.segments if s["status"] == "away"]
-
+        # 统计时长
         total_ticks = session.total_ticks
-        focused_ticks = sum(
-            session.consecutive_ticks if s["status"] == "focused" else 0
-            for s in session.segments
-        )
-
-        # 估算分钟数（粗略：tick 数 × 30s / 60）
         total_min = max(1, round(total_ticks * 30 / 60))
-        focused_min = max(0, round(len(focused_segments) * total_min / max(1, len(session.segments))))
-        distracted_min = max(0, round(len(distracted_segments) * total_min / max(1, len(session.segments))))
+
+        # 按 segment 类型估算分钟
+        seg_count = max(1, len(session.segments))
+        focused_count = sum(1 for s in session.segments if s["status"] == "focused")
+        distracted_count = sum(1 for s in session.segments if s["status"] == "distracted")
+        away_count = sum(1 for s in session.segments if s["status"] == "away")
+
+        focused_min = max(0, round(focused_count * total_min / seg_count))
+        distracted_min = max(0, round(distracted_count * total_min / seg_count))
         away_min = max(0, total_min - focused_min - distracted_min)
 
         # 构建 Segment 列表
@@ -333,32 +342,19 @@ class FocusService:
             for s in session.segments
         ]
 
-        # 走神摘要
-        distraction_notes = [s.get("note", "") for s in distracted_segments]
-        distraction_summary = "、".join(distraction_notes[:3]) if distraction_notes else "无"
-
-        # 构建建议
-        suggestions = []
-        if distracted_min > 5:
-            suggestions.append(f"下次可以尝试在开始前关闭容易分心的网页和应用")
-        if away_min > 5:
-            suggestions.append("离开时间偏长，可以试试番茄工作法：25 分钟专注 + 5 分钟休息")
-        if focused_min / max(1, total_min) > 0.7:
-            suggestions.append("专注度不错！继续保持这个节奏 🎉")
-        if not suggestions:
-            suggestions.append("继续保持，你可以做得更好！")
-
-        completion = (
-            f"本次专注共 {total_min} 分钟，"
-            f"其中专注约 {focused_min} 分钟，"
-            f"走神约 {distracted_min} 分钟（{distraction_summary}），"
-            f"离开约 {away_min} 分钟。"
+        # ── 调用 AI 生成简报 ──
+        timeline_text = "\n".join(
+            f"[{s['start_time']}-{s.get('end_time', '?')}] {s['status']}: {s.get('note', '')}"
+            for s in session.segments
         )
 
-        summary = (
-            f"在 {total_min} 分钟的专注会话中，"
-            f"你保持了约 {focused_min} 分钟的专注状态。"
-            + (f"中间有 {distracted_min} 分钟走神和 {away_min} 分钟离开。" if distracted_min + away_min > 0 else "表现很好！")
+        ai_report = await multimodal_ai_service.focus_generate_report(
+            task=session.task,
+            total_min=total_min,
+            focused_min=focused_min,
+            distracted_min=distracted_min,
+            away_min=away_min,
+            timeline_text=timeline_text,
         )
 
         return FocusReportResponse(
@@ -368,9 +364,9 @@ class FocusService:
             distracted_minutes=distracted_min,
             away_minutes=away_min,
             segments=segments_out,
-            completion_assessment=completion,
-            summary=summary,
-            suggestions=suggestions,
+            completion_assessment=ai_report.get("completion_assessment", ""),
+            summary=ai_report.get("summary", ""),
+            suggestions=ai_report.get("suggestions", []),
         )
 
 
