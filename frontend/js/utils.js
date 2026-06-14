@@ -36,7 +36,10 @@ const apiClient = {
   async transcribeSpeech(sessionId, audioBlob) {
     const formData = new FormData();
     formData.append('session_id', sessionId);
-    formData.append('audio', audioBlob, 'recording.webm');
+
+    const mimeType = (audioBlob.type || 'audio/webm').toLowerCase();
+    const ext = this._audioExtensionFromMime(mimeType);
+    formData.append('audio', audioBlob, `recording.${ext}`);
 
     const response = await fetch(`${API_BASE}/api/speech/transcribe`, {
       method: 'POST',
@@ -49,6 +52,16 @@ const apiClient = {
     }
 
     return response.json();
+  },
+
+  _audioExtensionFromMime(mimeType) {
+    if (mimeType.includes('ogg')) return 'ogg';
+    if (mimeType.includes('mp4')) return 'mp4';
+    if (mimeType.includes('mpeg')) return 'mp3';
+    if (mimeType.includes('mp3')) return 'mp3';
+    if (mimeType.includes('wav')) return 'wav';
+    if (mimeType.includes('flac')) return 'flac';
+    return 'webm';
   },
 
   /**

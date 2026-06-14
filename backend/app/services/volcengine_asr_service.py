@@ -40,6 +40,19 @@ class VolcengineASRService:
         """检查是否已配置 ASR 凭证"""
         return bool(self.app_id and self.access_token)
 
+    def _mime_type_for_format(self, audio_format: str) -> str:
+        if audio_format == "ogg_opus":
+            return "audio/ogg"
+        if audio_format == "m4a":
+            return "audio/mp4"
+        if audio_format == "mp3":
+            return "audio/mpeg"
+        if audio_format == "mpga":
+            return "audio/mpeg"
+        if audio_format == "oga":
+            return "audio/ogg"
+        return f"audio/{audio_format}"
+
     async def transcribe(
         self, audio_data: bytes, audio_format: str = "wav"
     ) -> Optional[SpeechTranscribeResponse]:
@@ -69,9 +82,6 @@ class VolcengineASRService:
             "user": {"uid": "deskmate-user"},
             "audio": {
                 "format": audio_format,
-                "rate": 16000,
-                "bits": 16,
-                "channel": 1,
             },
             "request": {
                 "model_name": "bigmodel",  # 大模型版 ASR，识别效果更好
@@ -80,11 +90,18 @@ class VolcengineASRService:
             },
         }
 
+        if audio_format in {"wav", "pcm"}:
+            request_meta["audio"].update({
+                "rate": 16000,
+                "bits": 16,
+                "channel": 1,
+            })
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # multipart/form-data 上传
                 files = {
-                    "audio": (f"recording.{audio_format}", audio_data, f"audio/{audio_format}"),
+                    "audio": (f"recording.{audio_format}", audio_data, self._mime_type_for_format(audio_format)),
                     "request": (None, json.dumps(request_meta, ensure_ascii=False), "application/json"),
                 }
 
@@ -118,10 +135,13 @@ class VolcengineASRService:
                 )
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"ASR HTTP 错误: {e.response.status_code} - {e.response.text[:300]}")
+            logger.error(f"ASR HTTP 错误: {e.response.status_code} - {e.response.text[:500]}")
+            return None
+        except httpx.TimeoutException as e:
+            logger.error(f"ASR 请求超时: {e}")
             return None
         except Exception as e:
-            logger.error(f"ASR 调用异常: {e}")
+            logger.error(f"ASR 调用异常: {type(e).__name__}: {e}", exc_info=True)
             return None
 
 

@@ -11,6 +11,7 @@ const App = {
     isRecording: false,
     currentMode: 'general',
     backendOnline: false,
+    pendingVoiceTranscript: false,
     // 专注陪伴模式
     focus: {
       active: false,
@@ -33,6 +34,7 @@ const App = {
     console.log('  支持 getDisplayMedia:', !!navigator.mediaDevices?.getDisplayMedia);
 
     this._bindEvents();
+    SpeechRecognizer.init();
     ChatManager.init(document.getElementById('chatPanel'));
 
     // 检查后端健康状态
@@ -131,7 +133,32 @@ const App = {
 
   _startRecording() {
     try {
-      MicManager.startRecording();
+      this.state.usingSpeechAPI = false;
+
+      // 优先使用浏览器内置语音识别（免费、实时、无需后端）
+      if (SpeechRecognizer.isSupported) {
+        this.state.usingSpeechAPI = true;
+        SpeechRecognizer.start(
+          // onResult: 实时更新输入框占位符
+          (text, isFinal) => {
+            const input = document.getElementById('chatInput');
+            if (text) {
+              input.placeholder = '🎤 ' + text;
+            }
+          },
+          // onError: 降级到后端 ASR
+          (error, message) => {
+            console.warn('Web Speech 出错，将降级到后端 ASR:', error);
+            this.state.usingSpeechAPI = false;
+          }
+        );
+        // 同时开始录音作为降级备份
+        try { MicManager.startRecording(); } catch (e) { /* ignore */ }
+      } else {
+        // 浏览器不支持 → 传统录音 + 后端 ASR
+        MicManager.startRecording();
+      }
+
       this.state.isRecording = true;
 
       const btn = document.getElementById('recordBtn');
@@ -140,48 +167,87 @@ const App = {
 
       document.getElementById('recordingIndicator').classList.remove('hidden');
 
-      console.log('🎤 录音中...');
+      const mode = this.state.usingSpeechAPI ? 'Web Speech API' : '后端 ASR';
+      console.log(`🎤 录音中... (${mode})`);
     } catch (err) {
       this._showError(err.message);
     }
   },
 
   async _stopRecording() {
+    const btn = document.getElementById('recordBtn');
+    const textInput = document.getElementById('chatInput');
+
     try {
-      const audioBlob = await MicManager.stopRecording();
-      this.state.isRecording = false;
+      if (this.state.usingSpeechAPI) {
+        // ── Web Speech API 路径 ──
+        const recognizedText = await SpeechRecognizer.stop();
+        console.log('Web Speech 识别结果:', recognizedText);
 
-      const btn = document.getElementById('recordBtn');
-      btn.classList.remove('recording');
-      btn.querySelector('.btn-label').textContent = '语音输入';
-      document.getElementById('recordingIndicator').classList.add('hidden');
-
-      if (audioBlob && audioBlob.size > 100) {
-        // 发送语音进行转写和回答
-        const textInput = document.getElementById('chatInput');
-        textInput.placeholder = '正在转写语音...';
-        textInput.disabled = true;
-
-        const result = await ChatManager.sendVoice(audioBlob);
-
-        textInput.placeholder = '输入问题，或点击语音按钮...';
-        textInput.disabled = false;
-
-        // 如果是演示模式（返回null），聚焦输入框让用户手动输入
-        if (result === null) {
+        if (recognizedText) {
+          // 直接填入输入框，跳过后端
+          textInput.value = recognizedText;
           textInput.focus();
+          textInput.style.height = 'auto';
+          textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+
+          if (typeof this.markPendingVoiceTranscript === 'function') {
+            this.markPendingVoiceTranscript();
+          }
+        } else {
+          // Web Speech 没识别到内容 → 降级到后端 ASR
+          console.log('Web Speech 未识别到内容，降级到后端 ASR...');
+          const audioBlob = await MicManager.stopRecording();
+          if (audioBlob && audioBlob.size > 100) {
+            textInput.placeholder = '正在转写语音...';
+            textInput.disabled = true;
+            const result = await ChatManager.sendVoice(audioBlob);
+            if (result === null) {
+              textInput.focus();
+            }
+          } else {
+            this._showError('未识别到语音内容，请重试或手动输入');
+            textInput.focus();
+          }
         }
       } else {
-        this._showError('录音内容为空，请重试');
+        // ── 传统后端 ASR 路径 ──
+        const audioBlob = await MicManager.stopRecording();
+
+        if (audioBlob && audioBlob.size > 100) {
+          textInput.placeholder = '正在转写语音...';
+          textInput.disabled = true;
+
+          const result = await ChatManager.sendVoice(audioBlob);
+
+          // 如果是演示模式或识别为空（返回 null），聚焦输入框让用户手动输入
+          if (result === null) {
+            textInput.focus();
+          }
+        } else {
+          this._showError('录音内容为空，请重试');
+        }
       }
     } catch (err) {
       console.error('停止录音失败:', err);
+      if (!err.userNotified) {
+        this._showError(err.message || '停止录音失败，请重试');
+      }
+    } finally {
       this.state.isRecording = false;
+      btn.classList.remove('recording');
+      btn.querySelector('.btn-label').textContent = '语音输入';
       document.getElementById('recordingIndicator').classList.add('hidden');
+      textInput.placeholder = '输入问题，或点击语音按钮...';
+      textInput.disabled = false;
     }
   },
 
   // ── 发送消息 ──
+  markPendingVoiceTranscript() {
+    this.state.pendingVoiceTranscript = true;
+  },
+
   async sendMessage() {
     const input = document.getElementById('chatInput');
     const userText = input.value.trim();
@@ -220,16 +286,25 @@ const App = {
     input.value = '';
     input.style.height = 'auto';
 
+    const inputSources = {
+      screen: this.state.screenShareOn,
+      camera: this.state.cameraOn,
+      microphone: this.state.pendingVoiceTranscript,
+    };
+
     // 禁用发送按钮
     const sendBtn = document.getElementById('sendBtn');
     sendBtn.disabled = true;
     sendBtn.textContent = '...';
 
     try {
+      ChatManager.updateInputSources(inputSources);
       await ChatManager.sendMessage(userText, images);
     } catch (err) {
       // 错误已在 chat.js 中处理
     } finally {
+      this.state.pendingVoiceTranscript = false;
+      this._updateInputSources();
       sendBtn.disabled = false;
       sendBtn.textContent = '发送';
     }
@@ -735,7 +810,7 @@ const App = {
     ChatManager.updateInputSources({
       screen: this.state.screenShareOn,
       camera: this.state.cameraOn,
-      microphone: this.state.micOn,
+      microphone: this.state.pendingVoiceTranscript,
     });
 
     // 更新截图选项的可见性

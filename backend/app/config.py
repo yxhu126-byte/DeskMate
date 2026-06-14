@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     # AI 模型配置
     AI_PROVIDER: str = "anthropic"  # "anthropic" | "openai" | "mock"
     ANTHROPIC_API_KEY: Optional[str] = None
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    ANTHROPIC_AUTH_TOKEN: Optional[str] = None      # Bearer token 鉴权（第三方代理）
+    ANTHROPIC_BASE_URL: Optional[str] = None        # 代理地址
+    ANTHROPIC_MODEL: str = "claude-opus-4-8"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
     OPENAI_BASE_URL: Optional[str] = None   # 代理地址，如 "https://api.openai.com/v1"

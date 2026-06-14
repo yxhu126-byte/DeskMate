@@ -4,6 +4,14 @@
 
 ---
 
+## 🎬 Demo 演示视频
+
+> 📺 **点击观看 DeskMate V1 功能演示**：[![Bilibili](https://img.shields.io/badge/Bilibili-DeskMate%20Demo-blue?logo=bilibili)](https://www.bilibili.com/video/BV1f1JK6eE2X/)
+
+🔗 视频链接：https://www.bilibili.com/video/BV1f1JK6eE2X/
+
+---
+
 ## 项目概述
 
 DeskMate 是一个运行在网页中的 AI 多模态伴随助手。用户主动授权摄像头、麦克风和屏幕共享后，AI 能够：
@@ -75,6 +83,7 @@ pip install -r requirements.txt
 编辑 `backend/.env`：
 
 - **不配置**（默认）：使用 Demo 模式，返回模拟回答
+- **使用火山方舟**：设置 `AI_PROVIDER=openai` + `OPENAI_API_KEY` + `OPENAI_MODEL` + `OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`
 - **使用 Claude**：设置 `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`
 - **使用 GPT-4o**：设置 `AI_PROVIDER=openai` + `OPENAI_API_KEY`
 
