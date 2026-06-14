@@ -120,6 +120,26 @@ const ChatManager = {
   },
 
   /**
+   * 添加专注模式系统消息（开启/结束通知）
+   */
+  addFocusSystemMessage(text) {
+    // 移除欢迎页
+    const welcome = this.chatPanelEl.querySelector('.welcome-screen');
+    if (welcome) welcome.remove();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message message-system';
+    msgDiv.innerHTML = `
+      <div class="message-avatar">🎯</div>
+      <div class="message-content">
+        <div class="message-text"><p>${Format.markdown(text)}</p></div>
+      </div>
+    `;
+    this.chatPanelEl.appendChild(msgDiv);
+    this.chatPanelEl.scrollTop = this.chatPanelEl.scrollHeight;
+  },
+
+  /**
    * 更新输入源状态
    */
   updateInputSources(sources) {

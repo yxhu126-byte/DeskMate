@@ -11,6 +11,18 @@ const App = {
     isRecording: false,
     currentMode: 'general',
     backendOnline: false,
+    // 专注陪伴模式
+    focus: {
+      active: false,
+      task: '',
+      duration: 30,          // 分钟
+      frequency: 30,         // 秒
+      tickCount: 0,
+      lastHash: null,
+      intervalId: null,
+      timerId: null,         // 状态栏计时器
+      startTime: null,       // 开始时间戳
+    },
   },
 
   // ── 初始化 ──
@@ -251,6 +263,16 @@ const App = {
       this.state.micOn = false;
       document.getElementById('recordingIndicator').classList.add('hidden');
     }
+    if (this.state.focus.active) {
+      // 结束专注但不获取简报（用户是"全部停止"不是正常结束）
+      this._stopFocusTimer();
+      if (this.state.focus.intervalId) {
+        clearInterval(this.state.focus.intervalId);
+        this.state.focus.intervalId = null;
+      }
+      this.state.focus.active = false;
+      document.getElementById('focusStatusBarItem').style.display = 'none';
+    }
 
     this._updateInputSources();
     this._updateAllStatusIndicators();
@@ -275,6 +297,137 @@ const App = {
       '💡 建议关闭包含密码、聊天记录等敏感信息的窗口后再共享屏幕',
     ];
     alert('🔒 隐私与安全提示\n\n' + tips.join('\n\n'));
+  },
+
+  // ── 专注模式操作 ──
+
+  /**
+   * 打开专注设置面板
+   */
+  openFocusSetup() {
+    if (!this.state.screenShareOn) {
+      this._showError('请先开启屏幕共享，AI 需要观察你的屏幕才能进行专注陪伴');
+      return;
+    }
+    document.getElementById('focusTaskInput').value = '';
+    document.getElementById('focusModalOverlay').classList.remove('hidden');
+    document.getElementById('focusTaskInput').focus();
+  },
+
+  /**
+   * 关闭专注设置面板
+   */
+  closeFocusSetup() {
+    document.getElementById('focusModalOverlay').classList.add('hidden');
+  },
+
+  /**
+   * 开始专注
+   */
+  startFocus() {
+    const task = document.getElementById('focusTaskInput').value.trim();
+    if (!task) {
+      this._showError('请输入任务描述，AI 需要知道你的目标才能判断是否走神');
+      return;
+    }
+
+    const duration = parseInt(document.getElementById('focusDurationSelect').value);
+    const frequency = parseInt(document.getElementById('focusFrequencySelect').value);
+
+    this.state.focus.active = true;
+    this.state.focus.task = task;
+    this.state.focus.duration = duration;
+    this.state.focus.frequency = frequency;
+    this.state.focus.tickCount = 0;
+    this.state.focus.lastHash = null;
+    this.state.focus.startTime = Date.now();
+
+    // 关闭设置面板
+    this.closeFocusSetup();
+
+    // 更新 UI
+    document.getElementById('focusBtn').classList.add('active');
+    document.getElementById('focusBtn').querySelector('.btn-label').textContent = '结束专注';
+
+    // 显示状态栏
+    const statusBarItem = document.getElementById('focusStatusBarItem');
+    statusBarItem.style.display = 'flex';
+    document.getElementById('focusStatusText').textContent =
+      task.length > 15 ? task.substring(0, 15) + '...' : task;
+
+    // 启动计时器
+    this._startFocusTimer();
+
+    ChatManager.addFocusSystemMessage(
+      `🎯 专注模式已开启\n📋 任务：${task}\n⏱ 预计：${duration} 分钟 · 观察频率：每 ${frequency} 秒\n\nAI 会在你走神时提醒你，加油！`
+    );
+
+    console.log(`🎯 专注模式已开启: "${task}" ${duration}分钟 @${frequency}s`);
+  },
+
+  /**
+   * 结束专注
+   */
+  stopFocus() {
+    if (!this.state.focus.active) return;
+
+    const minutes = Math.round((Date.now() - this.state.focus.startTime) / 60000);
+
+    // 停止轮询循环（PR #6 会实现）
+    if (this.state.focus.intervalId) {
+      clearInterval(this.state.focus.intervalId);
+      this.state.focus.intervalId = null;
+    }
+
+    // 停止计时器
+    this._stopFocusTimer();
+
+    // 重置状态
+    this.state.focus.active = false;
+    this.state.focus.task = '';
+    this.state.focus.tickCount = 0;
+    this.state.focus.lastHash = null;
+    this.state.focus.startTime = null;
+
+    // 更新 UI
+    const focusBtn = document.getElementById('focusBtn');
+    focusBtn.classList.remove('active');
+    focusBtn.querySelector('.btn-label').textContent = '开始专注';
+
+    // 隐藏状态栏
+    document.getElementById('focusStatusBarItem').style.display = 'none';
+
+    ChatManager.addFocusSystemMessage(
+      `✅ 专注模式已结束 · 共 ${minutes} 分钟\n（任务简报将在 PR #8 实现）`
+    );
+
+    console.log(`🎯 专注模式已结束，共 ${minutes} 分钟`);
+  },
+
+  /**
+   * 启动状态栏计时器
+   */
+  _startFocusTimer() {
+    this._stopFocusTimer();
+    const update = () => {
+      if (!this.state.focus.active) return;
+      const elapsed = Math.floor((Date.now() - this.state.focus.startTime) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const s = String(elapsed % 60).padStart(2, '0');
+      document.getElementById('focusTimer').textContent = `${m}:${s}`;
+    };
+    update();
+    this.state.focus.timerId = setInterval(update, 1000);
+  },
+
+  /**
+   * 停止状态栏计时器
+   */
+  _stopFocusTimer() {
+    if (this.state.focus.timerId) {
+      clearInterval(this.state.focus.timerId);
+      this.state.focus.timerId = null;
+    }
   },
 
   // ── 内部方法 ──
@@ -310,6 +463,21 @@ const App = {
     document.getElementById('stopAllBtn').addEventListener('click', () => this.stopAll());
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
     document.getElementById('privacyBtn').addEventListener('click', () => this.showPrivacyInfo());
+
+    // 专注模式
+    document.getElementById('focusBtn').addEventListener('click', () => {
+      if (this.state.focus.active) {
+        this.stopFocus();
+      } else {
+        this.openFocusSetup();
+      }
+    });
+    document.getElementById('focusStartBtn').addEventListener('click', () => this.startFocus());
+    document.getElementById('focusCancelBtn').addEventListener('click', () => this.closeFocusSetup());
+    // 点击弹窗背景关闭
+    document.getElementById('focusModalOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this.closeFocusSetup();
+    });
   },
 
   _updateInputSources() {
@@ -333,6 +501,16 @@ const App = {
     this._updateButtonState('cameraBtn', this.state.cameraOn, '摄像头', '摄像头');
     this._updateButtonState('screenBtn', this.state.screenShareOn, '屏幕共享', '屏幕共享');
     this._updateButtonState('micBtn', this.state.micOn, '麦克风', '麦克风');
+
+    // 专注按钮状态
+    const focusBtn = document.getElementById('focusBtn');
+    if (this.state.focus.active) {
+      focusBtn.classList.add('active');
+      focusBtn.querySelector('.btn-label').textContent = '结束专注';
+    } else {
+      focusBtn.classList.remove('active');
+      focusBtn.querySelector('.btn-label').textContent = '开始专注';
+    }
 
     // 录音按钮
     const recordBtn = document.getElementById('recordBtn');

@@ -741,3 +741,154 @@ body {
     max-width: 95%;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   专注陪伴模式 (Focus Companion) 样式
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 专注按钮 ── */
+.focus-btn {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px dashed var(--color-warning);
+}
+
+.focus-btn:hover {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: var(--color-warning);
+}
+
+.focus-btn.active {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning);
+}
+
+/* ── 弹窗背景 ── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+/* ── 弹窗面板 ── */
+.modal-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.modal-panel h3 {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+
+.modal-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 18px;
+}
+
+.focus-setup-panel {
+  max-width: 480px;
+}
+
+/* ── 设置面板字段 ── */
+.focus-field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.focus-field span {
+  display: block;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.focus-task-input {
+  width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.focus-task-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.focus-duration-select {
+  width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.focus-duration-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* ── 弹窗操作按钮 ── */
+.focus-setup-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.focus-setup-actions .action-btn {
+  flex: 1;
+  padding: 10px 16px;
+  text-align: center;
+}
+
+.focus-start-btn {
+  background: var(--color-warning) !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+.focus-start-btn:hover {
+  background: #f59e0b !important;
+}
+
+/* ── 系统消息（专注开启/结束等） ── */
+.message-system {
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.message-system .message-content {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  max-width: 85%;
+}
+
+.message-system .message-text p {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
