@@ -74,11 +74,7 @@ async def multimodal_chat(request: MultimodalChatRequest):
     user_msg_summary = privacy_service.sanitize_log_text(request.user_text)
     session_context_service.add_message(
         session.session_id, "user", user_msg_summary,
-        sources=[s for s in ["screen", "camera", "voice"] if (
-            (s == "screen" and request.input_sources.screen) or
-            (s == "camera" and request.input_sources.camera) or
-            (s == "voice" and request.input_sources.microphone)
-        )]
+        sources=response.used_sources
     )
     session_context_service.add_message(
         session.session_id, "assistant", response.answer,

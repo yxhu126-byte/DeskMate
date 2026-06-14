@@ -75,6 +75,7 @@ pip install -r requirements.txt
 编辑 `backend/.env`：
 
 - **不配置**（默认）：使用 Demo 模式，返回模拟回答
+- **使用火山方舟**：设置 `AI_PROVIDER=openai` + `OPENAI_API_KEY` + `OPENAI_MODEL` + `OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`
 - **使用 Claude**：设置 `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`
 - **使用 GPT-4o**：设置 `AI_PROVIDER=openai` + `OPENAI_API_KEY`
 
