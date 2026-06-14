@@ -140,6 +140,29 @@ const ChatManager = {
   },
 
   /**
+   * 显示专注模式走神提醒消息
+   */
+  addFocusAlertMessage(alertText) {
+    const welcome = this.chatPanelEl.querySelector('.welcome-screen');
+    if (welcome) welcome.remove();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message message-focus-alert';
+    msgDiv.innerHTML = `
+      <div class="message-avatar">🔔</div>
+      <div class="message-content">
+        <div class="message-header">
+          <span class="message-role">专注提醒</span>
+          <span class="message-time">${Format.time()}</span>
+        </div>
+        <div class="message-text"><p>${Format.markdown(alertText)}</p></div>
+      </div>
+    `;
+    this.chatPanelEl.appendChild(msgDiv);
+    this.chatPanelEl.scrollTop = this.chatPanelEl.scrollHeight;
+  },
+
+  /**
    * 更新输入源状态
    */
   updateInputSources(sources) {

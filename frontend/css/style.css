@@ -892,3 +892,20 @@ body {
   line-height: 1.6;
   white-space: pre-line;
 }
+
+/* ── 专注提醒消息（走神告警） ── */
+.message-focus-alert .message-content {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid var(--color-warning);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 12px 16px;
+}
+
+.message-focus-alert .message-avatar {
+  font-size: 20px;
+}
+
+.message-focus-alert .message-role {
+  color: var(--color-warning);
+  font-weight: 600;
+}

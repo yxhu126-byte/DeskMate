@@ -68,6 +68,47 @@ const apiClient = {
     const response = await fetch(`${API_BASE}/api/health`);
     return response.json();
   },
+
+  /**
+   * 专注模式 — 发送屏幕帧 tick
+   */
+  async focusTick({ sessionId, task, screenFrame, metadata }) {
+    const response = await fetch(`${API_BASE}/api/focus/tick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        task: task,
+        screen_frame: screenFrame,
+        metadata: metadata,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  /**
+   * 专注模式 — 获取任务简报
+   */
+  async focusReport(sessionId) {
+    const response = await fetch(`${API_BASE}/api/focus/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  },
 };
 
 
