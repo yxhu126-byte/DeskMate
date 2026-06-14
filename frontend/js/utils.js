@@ -188,3 +188,64 @@ const Format = {
     });
   },
 };
+
+
+// ══════════════════════════════════════════════════════════
+// 感知哈希（aHash）— 用于画面变化检测
+// ══════════════════════════════════════════════════════════
+const ImageHasher = {
+  /**
+   * 计算 video 元素当前帧的感知哈希（aHash）
+   */
+  computeFrameHash(videoEl, hashSize) {
+    hashSize = hashSize || 16;
+    if (!videoEl || videoEl.readyState < 2) {
+      throw new Error('视频流未就绪，无法计算哈希');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = hashSize;
+    canvas.height = hashSize;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoEl, 0, 0, hashSize, hashSize);
+
+    const imageData = ctx.getImageData(0, 0, hashSize, hashSize);
+    const pixels = imageData.data;
+
+    const grayValues = new Array(hashSize * hashSize);
+    let sum = 0;
+    for (let i = 0; i < hashSize * hashSize; i++) {
+      const off = i * 4;
+      const gray = Math.round(0.299 * pixels[off] + 0.587 * pixels[off + 1] + 0.114 * pixels[off + 2]);
+      grayValues[i] = gray;
+      sum += gray;
+    }
+    const avg = sum / (hashSize * hashSize);
+
+    const bits = [];
+    for (let i = 0; i < grayValues.length; i++) {
+      bits.push(grayValues[i] >= avg ? '1' : '0');
+    }
+
+    let hash = '';
+    for (let i = 0; i < bits.length; i += 4) {
+      hash += parseInt(bits.slice(i, i + 4).join(''), 2).toString(16);
+    }
+
+    return { hash: hash, width: hashSize, height: hashSize };
+  },
+
+  /**
+   * 计算两个感知哈希之间的汉明距离
+   */
+  hashDistance(hash1, hash2) {
+    if (!hash1 || !hash2 || hash1.length !== hash2.length) return 256;
+    let distance = 0;
+    for (let i = 0; i < hash1.length; i++) {
+      let xor = parseInt(hash1[i], 16) ^ parseInt(hash2[i], 16);
+      while (xor) { distance++; xor &= xor - 1; }
+    }
+    return distance;
+  },
+};
