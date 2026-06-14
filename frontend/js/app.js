@@ -338,6 +338,10 @@ const App = {
     this.state.focus.tickCount = 0;
     this.state.focus.lastHash = null;
     this.state.focus.startTime = Date.now();
+    this.state.focus._backgroundTicks = 0;
+    this.state.focus._failCount = 0;
+    this.state.focus._apiFailCount = 0;
+    this.state.focus._firstTickConfirmed = false;
 
     // 关闭设置面板
     this.closeFocusSetup();
@@ -417,7 +421,23 @@ const App = {
   _startFocusLoop() {
     this._stopFocusLoop();
     const intervalMs = this.state.focus.frequency * 1000;
-    console.log(`🔄 专注轮询启动: 每 ${this.state.focus.frequency}s`);
+    console.log(`[Focus] Polling started: every ${this.state.focus.frequency}s`);
+
+    // 初始化追踪变量
+    this.state.focus._backgroundTicks = 0;
+    this.state.focus._failCount = 0;
+    this.state.focus._apiFailCount = 0;
+    this.state.focus._firstTickConfirmed = false;
+
+    // 可见性变化 → 回来后立即 tick
+    this.state.focus._visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && this.state.focus.active) {
+        console.log(`[Focus] Tab visible again, bg ticks: ${this.state.focus._backgroundTicks}`);
+        this.state.focus._backgroundTicks = 0;
+        this._focusTick();
+      }
+    };
+    document.addEventListener('visibilitychange', this.state.focus._visibilityHandler);
 
     this.state.focus.intervalId = setInterval(() => {
       this._focusTick();
@@ -427,15 +447,16 @@ const App = {
     setTimeout(() => this._focusTick(), 1000);
   },
 
-  /**
-   * 停止专注轮询循环
-   */
   _stopFocusLoop() {
     if (this.state.focus.intervalId) {
       clearInterval(this.state.focus.intervalId);
       this.state.focus.intervalId = null;
-      console.log('🔄 专注轮询已停止');
     }
+    if (this.state.focus._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.state.focus._visibilityHandler);
+      this.state.focus._visibilityHandler = null;
+    }
+    console.log('[Focus] Polling stopped');
   },
 
   /**
@@ -445,17 +466,36 @@ const App = {
     const f = this.state.focus;
     if (!f.active) return;
 
-    // 后台标签页暂停
+    // 防止并发：上一次 tick 还在处理中则跳过
+    if (f._tickInProgress) return;
+    f._tickInProgress = true;
+
+    try {
+      await this._doFocusTick();
+    } finally {
+      f._tickInProgress = false;
+    }
+  },
+
+  async _doFocusTick() {
+    const f = this.state.focus;
+
+    // 后台标签页暂停（但计数）
     if (document.visibilityState === 'hidden') {
-      console.debug('[Focus] 后台标签页，跳过 tick');
+      f._backgroundTicks = (f._backgroundTicks || 0) + 1;
       return;
     }
 
     // 屏幕共享必须存活
     if (!ScreenShareManager.isReady()) {
-      console.debug('[Focus] 屏幕共享未就绪，跳过 tick');
+      if (f._failCount === undefined) f._failCount = 0;
+      f._failCount++;
+      if (f._failCount === 1 || f._failCount % 10 === 0) {
+        console.warn(`[Focus] 屏幕共享未就绪 (连续 ${f._failCount} 次)，请确认屏幕共享已开启`);
+      }
       return;
     }
+    f._failCount = 0;
 
     try {
       // 1. 截帧
@@ -469,7 +509,6 @@ const App = {
         );
         hash = result.hash;
       } catch (e) {
-        // 如果哈希计算失败（比如视频未就绪），生成一个随机哈希确保不会误判
         hash = 'fallback_' + Date.now();
       }
 
@@ -477,6 +516,8 @@ const App = {
       const idleSeconds = this._getIdleSeconds();
       if (hash === f.lastHash && idleSeconds < 60) {
         f.tickCount++;
+        // 仍然更新 UI 中的 tick 计数
+        this._updateFocusTickUI();
         return;
       }
       f.lastHash = hash;
@@ -486,7 +527,11 @@ const App = {
       const response = await apiClient.focusTick({
         sessionId: ChatManager.sessionId,
         task: f.task,
-        screenFrame: frame,
+        screenFrame: {
+          type: 'screen',
+          mime_type: 'image/jpeg',
+          data: frame.data,
+        },
         metadata: {
           tick_index: f.tickCount,
           seconds_elapsed: f.tickCount * f.frequency,
@@ -496,21 +541,50 @@ const App = {
         },
       });
 
-      // 5. 处理提醒
+      // 重置连续失败计数
+      f._apiFailCount = 0;
+
+      // 5. 首次成功 tick → 确认消息
+      if (f.tickCount === 1 && !f._firstTickConfirmed) {
+        f._firstTickConfirmed = true;
+        ChatManager.addFocusSystemMessage('👁️ AI 开始观察你的屏幕，专注陪伴中...');
+      }
+
+      // 6. 更新 UI 中的 tick 计数
+      this._updateFocusTickUI();
+
+      // 7. 处理提醒
       if (response.should_alert && response.alert_message) {
         ChatManager.addFocusAlertMessage(response.alert_message);
-        console.log(`🔔 专注提醒: ${response.alert_message.substring(0, 50)}...`);
+        console.log(`[Focus] Alert: ${response.alert_message.substring(0, 60)}...`);
       }
 
-      // 6. 后台切回补偿：如果后台了很久回来，补充一次 tick
-      if (this.state.focus._backgroundTicks > 3) {
-        console.debug(`[Focus] 后台期间跳过 ${this.state.focus._backgroundTicks} 次 tick`);
-      }
-      this.state.focus._backgroundTicks = 0;
+      console.log(
+        `[Focus] tick #${f.tickCount} status=${response.status} ` +
+        `hash=${hash.substring(0, 6)}... title="${document.title.substring(0, 30)}" ` +
+        `alert=${response.should_alert}`
+      );
 
     } catch (err) {
-      console.error('[Focus] tick 失败:', err.message);
-      // 不中断循环
+      f._apiFailCount = (f._apiFailCount || 0) + 1;
+      console.error(`[Focus] tick #${f.tickCount} failed (x${f._apiFailCount}): ${err.message}`);
+
+      // 连续失败 ≥3 次 → 用户可见提示
+      if (f._apiFailCount === 3) {
+        this._showError('专注模式 API 连续失败，请确认后端服务正在运行 (端口 8001)');
+      }
+      // 仍然更新 tick 计数让用户知道轮询在跑
+      this._updateFocusTickUI();
+    }
+  },
+
+  /**
+   * 更新状态栏中的 tick 计数
+   */
+  _updateFocusTickUI() {
+    const el = document.getElementById('focusTickCount');
+    if (el) {
+      el.textContent = this.state.focus.tickCount;
     }
   },
 
