@@ -269,6 +269,7 @@ const App = {
       this._stopIdleTracking();
       this.state.focus.active = false;
       document.body.classList.remove('focus-mode-active');
+      document.getElementById('focusFramePreview').classList.add('hidden');
       document.getElementById('focusStatusBarItem').style.display = 'none';
     }
 
@@ -354,6 +355,7 @@ const App = {
 
     const statusBarItem = document.getElementById('focusStatusBarItem');
     statusBarItem.style.display = 'flex';
+    document.getElementById('focusFramePreview').classList.remove('hidden');
     document.getElementById('focusStatusText').textContent =
       task.length > 15 ? task.substring(0, 15) + '...' : task;
 
@@ -389,6 +391,7 @@ const App = {
     this.state.focus.startTime = null;
 
     document.body.classList.remove('focus-mode-active');
+    document.getElementById('focusFramePreview').classList.add('hidden');
     const focusBtn = document.getElementById('focusBtn');
     focusBtn.classList.remove('active');
     focusBtn.querySelector('.btn-label').textContent = '🎯 开始专注';
@@ -504,6 +507,9 @@ const App = {
       // 1. 截帧
       const frame = ScreenShareManager.captureFrame(640, 640, 0.5);
 
+      // 1a. 更新缩略图预览（每次截帧都更新，让用户看到 AI 看到了什么）
+      this._updateFocusThumbnail(frame);
+
       // 2. 感知哈希
       let hash;
       try {
@@ -588,6 +594,24 @@ const App = {
     const el = document.getElementById('focusTickCount');
     if (el) {
       el.textContent = this.state.focus.tickCount;
+    }
+  },
+
+  /**
+   * 更新专注观察截图缩略图
+   */
+  _updateFocusThumbnail(frame) {
+    const container = document.getElementById('focusFramePreview');
+    const img = document.getElementById('focusFrameThumb');
+    const timeLabel = document.getElementById('focusFrameTime');
+    if (container && img && frame.dataUrl) {
+      img.src = frame.dataUrl;
+      container.classList.remove('hidden');
+      if (timeLabel) {
+        const now = new Date();
+        timeLabel.textContent =
+          `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+      }
     }
   },
 

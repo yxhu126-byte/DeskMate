@@ -759,6 +759,21 @@ body {
   border-color: var(--color-warning);
 }
 
+/* ── 专注观察截图缩略图 ── */
+#focusFramePreview {
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.focus-frame-thumb {
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+
 /* 专注激活态 — 脉冲呼吸动画 */
 .focus-btn.active {
   background: rgba(251, 191, 36, 0.18);
