@@ -366,10 +366,11 @@ const App = {
   /**
    * 结束专注
    */
-  stopFocus() {
+  async stopFocus() {
     if (!this.state.focus.active) return;
 
-    const minutes = Math.round((Date.now() - this.state.focus.startTime) / 60000);
+    const totalMinutes = Math.round((Date.now() - this.state.focus.startTime) / 60000);
+    const sessionId = ChatManager.sessionId;
 
     this._stopFocusLoop();
     this._stopFocusTimer();
@@ -386,11 +387,28 @@ const App = {
     focusBtn.querySelector('.btn-label').textContent = '开始专注';
     document.getElementById('focusStatusBarItem').style.display = 'none';
 
-    ChatManager.addFocusSystemMessage(
-      `✅ 专注模式已结束 · 共 ${minutes} 分钟\n（任务简报将在 PR #8 实现）`
-    );
+    // 获取并展示简报
+    ChatManager.addFocusSystemMessage('⏳ 正在生成专注简报...');
+    try {
+      const report = await apiClient.focusReport(sessionId);
+      ChatManager.addFocusReportCard(report);
+    } catch (err) {
+      console.error('获取简报失败:', err);
+      // 降级：展示本地统计
+      ChatManager.addFocusReportCard({
+        task: '(本地统计)',
+        total_minutes: totalMinutes,
+        focused_minutes: totalMinutes,
+        distracted_minutes: 0,
+        away_minutes: 0,
+        segments: [],
+        completion_assessment: '无法获取 AI 简报（后端不可用）',
+        summary: `专注模式已结束，共 ${totalMinutes} 分钟。`,
+        suggestions: ['请确保后端服务正在运行以获取完整简报'],
+      });
+    }
 
-    console.log(`🎯 专注模式已结束，共 ${minutes} 分钟`);
+    console.log(`Focus ended, ${totalMinutes} min total`);
   },
 
   /**

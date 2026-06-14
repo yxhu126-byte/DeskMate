@@ -163,6 +163,98 @@ const ChatManager = {
   },
 
   /**
+   * 展示专注简报卡片
+   */
+  addFocusReportCard(reportData) {
+    const welcome = this.chatPanelEl.querySelector('.welcome-screen');
+    if (welcome) welcome.remove();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message message-focus-report';
+
+    const pct = reportData.total_minutes > 0
+      ? Math.round(reportData.focused_minutes / reportData.total_minutes * 100)
+      : 0;
+
+    const timelineHTML = reportData.segments && reportData.segments.length > 0
+      ? reportData.segments.map(s => {
+          const icons = { focused: '🟢', distracted: '🟡', away: '⚪' };
+          const labels = { focused: '专注', distracted: '走神', away: '离开' };
+          const icon = icons[s.status] || '●';
+          const label = labels[s.status] || s.status;
+          return `<div class="report-timeline-item">
+            <span class="report-timeline-icon">${icon}</span>
+            <span class="report-timeline-time">${s.start_time} - ${s.end_time || '?'}</span>
+            <span class="report-timeline-status">${label}</span>
+            <span class="report-timeline-note">${s.note || ''}</span>
+          </div>`;
+        }).join('')
+      : '<div class="report-timeline-empty">(无详细时间线)</div>';
+
+    const suggestionsHTML = reportData.suggestions && reportData.suggestions.length > 0
+      ? reportData.suggestions.map(s => `<li>${s}</li>`).join('')
+      : '<li>继续保持！</li>';
+
+    msgDiv.innerHTML = `
+      <div class="report-card">
+        <div class="report-header">
+          <span class="report-icon">📊</span>
+          <span class="report-title">专注简报</span>
+          <span class="report-task">${this._escapeHtml(reportData.task || '未记录')}</span>
+        </div>
+
+        <div class="report-stats">
+          <div class="report-stat focused">
+            <span class="stat-value">${reportData.focused_minutes}</span>
+            <span class="stat-label">分钟专注</span>
+          </div>
+          <div class="report-stat distracted">
+            <span class="stat-value">${reportData.distracted_minutes}</span>
+            <span class="stat-label">分钟走神</span>
+          </div>
+          <div class="report-stat away">
+            <span class="stat-value">${reportData.away_minutes}</span>
+            <span class="stat-label">分钟离开</span>
+          </div>
+        </div>
+
+        <div class="report-section">
+          <div class="report-section-title">📋 时间线</div>
+          <div class="report-timeline">${timelineHTML}</div>
+        </div>
+
+        ${reportData.completion_assessment ? `
+        <div class="report-section">
+          <div class="report-section-title">📝 任务评估</div>
+          <div class="report-text">${this._escapeHtml(reportData.completion_assessment)}</div>
+        </div>` : ''}
+
+        ${reportData.summary ? `
+        <div class="report-section">
+          <div class="report-section-title">🤖 AI 总结</div>
+          <div class="report-text">${this._escapeHtml(reportData.summary)}</div>
+        </div>` : ''}
+
+        <div class="report-section">
+          <div class="report-section-title">💡 小建议</div>
+          <ul class="report-suggestions">${suggestionsHTML}</ul>
+        </div>
+      </div>
+    `;
+
+    this.chatPanelEl.appendChild(msgDiv);
+    this.chatPanelEl.scrollTop = this.chatPanelEl.scrollHeight;
+  },
+
+  _escapeHtml(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  },
+
+  /**
    * 更新输入源状态
    */
   updateInputSources(sources) {
