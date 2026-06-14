@@ -100,14 +100,8 @@ class MultimodalAIService:
             f"模式: {request.mode.value}, 图片数: {len(request.images)}"
         )
 
-        # 4. 构建响应
-        used_sources = []
-        if request.input_sources.screen:
-            used_sources.append("screen")
-        if request.input_sources.camera:
-            used_sources.append("camera")
-        if request.input_sources.microphone:
-            used_sources.append("voice")
+        # 4. 构建响应：screen/camera 只按实际图片计算，voice 按本次语音转写标记计算
+        used_sources = self._derive_used_sources(request)
 
         uncertainty = self._check_uncertainty(request, answer)
 
@@ -117,6 +111,19 @@ class MultimodalAIService:
             uncertainty=uncertainty,
             suggestions=self._generate_suggestions(request),
         )
+
+    def _derive_used_sources(self, request: MultimodalChatRequest) -> list[str]:
+        sources = []
+        image_types = {img.type for img in request.images}
+
+        if "screen" in image_types:
+            sources.append("screen")
+        if "camera" in image_types:
+            sources.append("camera")
+        if request.input_sources.microphone:
+            sources.append("voice")
+
+        return sources
 
     def _build_multimodal_content(
         self,
@@ -146,9 +153,10 @@ class MultimodalAIService:
 
         # ── 输入源标注 ──
         source_desc = []
-        if request.input_sources.screen:
+        image_types = {img.type for img in request.images}
+        if "screen" in image_types:
             source_desc.append("📺 屏幕截图")
-        if request.input_sources.camera:
+        if "camera" in image_types:
             source_desc.append("📷 摄像头画面")
         if request.input_sources.microphone:
             source_desc.append("🎤 语音输入")
@@ -188,7 +196,11 @@ class MultimodalAIService:
         try:
             import anthropic
 
-            client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            client = anthropic.AsyncAnthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
+                auth_token=settings.ANTHROPIC_AUTH_TOKEN,
+                base_url=settings.ANTHROPIC_BASE_URL or None,
+            )
 
             response = await client.messages.create(
                 model=settings.ANTHROPIC_MODEL,
@@ -296,7 +308,7 @@ class MultimodalAIService:
     def _generate_suggestions(self, request: MultimodalChatRequest) -> list[str]:
         """根据场景生成建议的后续操作"""
         suggestions = []
-        if request.input_sources.screen:
+        if any(img.type == "screen" for img in request.images):
             suggestions.append("你可以放大关键区域后重新截图提问")
         if request.mode == SceneMode.CODING:
             suggestions.append("尝试切换到高精度模式以获取更清晰的代码截图")
@@ -435,7 +447,11 @@ class MultimodalAIService:
 
     async def _call_anthropic_focus_relevance(self, prompt: str, image_base64: str) -> dict:
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = anthropic.AsyncAnthropic(
+            api_key=settings.ANTHROPIC_API_KEY,
+            auth_token=settings.ANTHROPIC_AUTH_TOKEN,
+            base_url=settings.ANTHROPIC_BASE_URL or None,
+        )
         content = [
             {"type": "text", "text": prompt},
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_base64}},
@@ -465,7 +481,11 @@ class MultimodalAIService:
 
     async def _call_anthropic_simple(self, prompt: str) -> str:
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = anthropic.AsyncAnthropic(
+            api_key=settings.ANTHROPIC_API_KEY,
+            auth_token=settings.ANTHROPIC_AUTH_TOKEN,
+            base_url=settings.ANTHROPIC_BASE_URL or None,
+        )
         response = await client.messages.create(
             model=settings.ANTHROPIC_MODEL, max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
