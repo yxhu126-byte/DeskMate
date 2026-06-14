@@ -11,6 +11,18 @@ const App = {
     isRecording: false,
     currentMode: 'general',
     backendOnline: false,
+    // 专注陪伴模式
+    focus: {
+      active: false,
+      task: '',
+      duration: 30,          // 分钟
+      frequency: 30,         // 秒
+      tickCount: 0,
+      lastHash: null,
+      intervalId: null,
+      timerId: null,         // 状态栏计时器
+      startTime: null,       // 开始时间戳
+    },
   },
 
   // ── 初始化 ──
@@ -251,6 +263,15 @@ const App = {
       this.state.micOn = false;
       document.getElementById('recordingIndicator').classList.add('hidden');
     }
+    if (this.state.focus.active) {
+      this._stopFocusLoop();
+      this._stopFocusTimer();
+      this._stopIdleTracking();
+      this.state.focus.active = false;
+      document.body.classList.remove('focus-mode-active');
+      document.getElementById('focusFramePreview').classList.add('hidden');
+      document.getElementById('focusStatusBarItem').style.display = 'none';
+    }
 
     this._updateInputSources();
     this._updateAllStatusIndicators();
@@ -275,6 +296,389 @@ const App = {
       '💡 建议关闭包含密码、聊天记录等敏感信息的窗口后再共享屏幕',
     ];
     alert('🔒 隐私与安全提示\n\n' + tips.join('\n\n'));
+  },
+
+  // ── 专注模式操作 ──
+
+  /**
+   * 打开专注设置面板
+   */
+  openFocusSetup() {
+    if (!this.state.screenShareOn) {
+      this._showError('请先开启屏幕共享，AI 需要观察你的屏幕才能进行专注陪伴');
+      return;
+    }
+    document.getElementById('focusTaskInput').value = '';
+    document.getElementById('focusModalOverlay').classList.remove('hidden');
+    document.getElementById('focusTaskInput').focus();
+  },
+
+  /**
+   * 关闭专注设置面板
+   */
+  closeFocusSetup() {
+    document.getElementById('focusModalOverlay').classList.add('hidden');
+  },
+
+  /**
+   * 开始专注
+   */
+  startFocus() {
+    const task = document.getElementById('focusTaskInput').value.trim();
+    if (!task) {
+      this._showError('请输入任务描述，AI 需要知道你的目标才能判断是否走神');
+      return;
+    }
+
+    const duration = parseInt(document.getElementById('focusDurationSelect').value);
+    const frequency = parseInt(document.getElementById('focusFrequencySelect').value);
+
+    this.state.focus.active = true;
+    this.state.focus.task = task;
+    this.state.focus.duration = duration;
+    this.state.focus.frequency = frequency;
+    this.state.focus.tickCount = 0;
+    this.state.focus.lastHash = null;
+    this.state.focus.startTime = Date.now();
+    this.state.focus._backgroundTicks = 0;
+    this.state.focus._failCount = 0;
+    this.state.focus._apiFailCount = 0;
+    this.state.focus._firstTickConfirmed = false;
+
+    // 关闭设置面板
+    this.closeFocusSetup();
+
+    // 更新 UI — body 级标记
+    document.body.classList.add('focus-mode-active');
+    document.getElementById('focusBtn').classList.add('active');
+    document.getElementById('focusBtn').querySelector('.btn-label').textContent = '⏹ 结束专注';
+
+    const statusBarItem = document.getElementById('focusStatusBarItem');
+    statusBarItem.style.display = 'flex';
+    document.getElementById('focusFramePreview').classList.remove('hidden');
+    document.getElementById('focusStatusText').textContent =
+      task.length > 15 ? task.substring(0, 15) + '...' : task;
+
+    // 启动计时器 + 轮询循环
+    this._startFocusTimer();
+    this._startFocusLoop();
+    this._startIdleTracking();
+
+    ChatManager.addFocusSystemMessage(
+      `🎯 专注模式已开启\n📋 任务：${task}\n⏱ 预计：${duration} 分钟 · 观察频率：每 ${frequency} 秒\n\nAI 会在你走神时提醒你，加油！`
+    );
+
+    console.log(`🎯 专注模式已开启: "${task}" ${duration}分钟 @${frequency}s`);
+  },
+
+  /**
+   * 结束专注
+   */
+  async stopFocus() {
+    if (!this.state.focus.active) return;
+
+    const totalMinutes = Math.round((Date.now() - this.state.focus.startTime) / 60000);
+    const sessionId = ChatManager.sessionId;
+
+    this._stopFocusLoop();
+    this._stopFocusTimer();
+    this._stopIdleTracking();
+
+    this.state.focus.active = false;
+    this.state.focus.task = '';
+    this.state.focus.tickCount = 0;
+    this.state.focus.lastHash = null;
+    this.state.focus.startTime = null;
+
+    document.body.classList.remove('focus-mode-active');
+    document.getElementById('focusFramePreview').classList.add('hidden');
+    const focusBtn = document.getElementById('focusBtn');
+    focusBtn.classList.remove('active');
+    focusBtn.querySelector('.btn-label').textContent = '🎯 开始专注';
+    document.getElementById('focusStatusBarItem').style.display = 'none';
+
+    // 获取并展示简报
+    ChatManager.addFocusSystemMessage('⏳ 正在生成专注简报...');
+    try {
+      const report = await apiClient.focusReport(sessionId);
+      ChatManager.addFocusReportCard(report);
+    } catch (err) {
+      console.error('获取简报失败:', err);
+      // 降级：展示本地统计
+      ChatManager.addFocusReportCard({
+        task: '(本地统计)',
+        total_minutes: totalMinutes,
+        focused_minutes: totalMinutes,
+        distracted_minutes: 0,
+        away_minutes: 0,
+        segments: [],
+        completion_assessment: '无法获取 AI 简报（后端不可用）',
+        summary: `专注模式已结束，共 ${totalMinutes} 分钟。`,
+        suggestions: ['请确保后端服务正在运行以获取完整简报'],
+      });
+    }
+
+    console.log(`Focus ended, ${totalMinutes} min total`);
+  },
+
+  /**
+   * 启动专注轮询循环
+   */
+  _startFocusLoop() {
+    this._stopFocusLoop();
+    const intervalMs = this.state.focus.frequency * 1000;
+    console.log(`[Focus] Polling started: every ${this.state.focus.frequency}s`);
+
+    // 初始化追踪变量
+    this.state.focus._backgroundTicks = 0;
+    this.state.focus._failCount = 0;
+    this.state.focus._apiFailCount = 0;
+    this.state.focus._firstTickConfirmed = false;
+
+    // 可见性变化 → 回来后立即 tick
+    this.state.focus._visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && this.state.focus.active) {
+        console.log(`[Focus] Tab visible again, bg ticks: ${this.state.focus._backgroundTicks}`);
+        this.state.focus._backgroundTicks = 0;
+        this._focusTick();
+      }
+    };
+    document.addEventListener('visibilitychange', this.state.focus._visibilityHandler);
+
+    this.state.focus.intervalId = setInterval(() => {
+      this._focusTick();
+    }, intervalMs);
+
+    // 立即执行第一次 tick
+    setTimeout(() => this._focusTick(), 1000);
+  },
+
+  _stopFocusLoop() {
+    if (this.state.focus.intervalId) {
+      clearInterval(this.state.focus.intervalId);
+      this.state.focus.intervalId = null;
+    }
+    if (this.state.focus._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.state.focus._visibilityHandler);
+      this.state.focus._visibilityHandler = null;
+    }
+    console.log('[Focus] Polling stopped');
+  },
+
+  /**
+   * 执行一次专注 tick: 截帧 → 哈希 → 上传 → 处理提醒
+   */
+  async _focusTick() {
+    const f = this.state.focus;
+    if (!f.active) return;
+
+    // 防止并发：上一次 tick 还在处理中则跳过
+    if (f._tickInProgress) return;
+    f._tickInProgress = true;
+
+    try {
+      await this._doFocusTick();
+    } finally {
+      f._tickInProgress = false;
+    }
+  },
+
+  async _doFocusTick() {
+    const f = this.state.focus;
+
+    // 后台标签页暂停（但计数）
+    if (document.visibilityState === 'hidden') {
+      f._backgroundTicks = (f._backgroundTicks || 0) + 1;
+      return;
+    }
+
+    // 屏幕共享必须存活
+    if (!ScreenShareManager.isReady()) {
+      if (f._failCount === undefined) f._failCount = 0;
+      f._failCount++;
+      if (f._failCount === 1 || f._failCount % 10 === 0) {
+        console.warn(`[Focus] 屏幕共享未就绪 (连续 ${f._failCount} 次)，请确认屏幕共享已开启`);
+      }
+      return;
+    }
+    f._failCount = 0;
+
+    try {
+      // 1. 截帧
+      const frame = ScreenShareManager.captureFrame(640, 640, 0.5);
+
+      // 1a. 更新缩略图预览（每次截帧都更新，让用户看到 AI 看到了什么）
+      this._updateFocusThumbnail(frame);
+
+      // 2. 感知哈希
+      let hash;
+      try {
+        const result = ImageHasher.computeFrameHash(
+          document.getElementById('screenVideo'), 16
+        );
+        hash = result.hash;
+      } catch (e) {
+        hash = 'fallback_' + Date.now();
+      }
+
+      // 3. 前端粗筛：hash 完全不变 + 用户活跃时跳过
+      const idleSeconds = this._getIdleSeconds();
+      if (hash === f.lastHash && idleSeconds < 60) {
+        f.tickCount++;
+        // 仍然更新 UI 中的 tick 计数
+        this._updateFocusTickUI();
+        return;
+      }
+      f.lastHash = hash;
+      f.tickCount++;
+
+      // 4. 调用后端
+      const response = await apiClient.focusTick({
+        sessionId: ChatManager.sessionId,
+        task: f.task,
+        screenFrame: {
+          type: 'screen',
+          mime_type: 'image/jpeg',
+          data: frame.data,
+        },
+        metadata: {
+          tick_index: f.tickCount,
+          seconds_elapsed: f.tickCount * f.frequency,
+          page_title: document.title,
+          frame_hash: hash,
+          idle_seconds: idleSeconds,
+        },
+      });
+
+      // 重置连续失败计数
+      f._apiFailCount = 0;
+
+      // 5. 首次成功 tick → 确认消息
+      if (f.tickCount === 1 && !f._firstTickConfirmed) {
+        f._firstTickConfirmed = true;
+        ChatManager.addFocusSystemMessage('👁️ AI 开始观察你的屏幕，专注陪伴中...');
+      }
+
+      // 6. 更新 UI 中的 tick 计数
+      this._updateFocusTickUI();
+
+      // 7. 处理提醒
+      if (response.should_alert && response.alert_message) {
+        ChatManager.addFocusAlertMessage(response.alert_message);
+        console.log(`[Focus] Alert: ${response.alert_message.substring(0, 60)}...`);
+      }
+
+      console.log(
+        `[Focus] tick #${f.tickCount} status=${response.status} ` +
+        `hash=${hash.substring(0, 6)}... title="${document.title.substring(0, 30)}" ` +
+        `alert=${response.should_alert}`
+      );
+
+    } catch (err) {
+      f._apiFailCount = (f._apiFailCount || 0) + 1;
+      console.error(`[Focus] tick #${f.tickCount} failed (x${f._apiFailCount}): ${err.message}`);
+
+      // 连续失败 ≥3 次 → 用户可见提示
+      if (f._apiFailCount === 3) {
+        this._showError('专注模式 API 连续失败，请确认后端服务正在运行 (端口 8001)');
+      }
+      // 仍然更新 tick 计数让用户知道轮询在跑
+      this._updateFocusTickUI();
+    }
+  },
+
+  /**
+   * 更新状态栏中的 tick 计数
+   */
+  _updateFocusTickUI() {
+    const el = document.getElementById('focusTickCount');
+    if (el) {
+      el.textContent = this.state.focus.tickCount;
+    }
+  },
+
+  /**
+   * 更新专注观察截图缩略图
+   */
+  _updateFocusThumbnail(frame) {
+    const container = document.getElementById('focusFramePreview');
+    const img = document.getElementById('focusFrameThumb');
+    const timeLabel = document.getElementById('focusFrameTime');
+    if (!container || !img) return;
+
+    // 确保 dataUrl 一定存在（兼容缓存 / 兜底）
+    let dataUrl = frame.dataUrl;
+    if (!dataUrl && frame.data) {
+      dataUrl = `data:${frame.mime_type || 'image/jpeg'};base64,${frame.data}`;
+    }
+    if (!dataUrl) {
+      console.warn('[Focus] 缩略图: frame 中没有 dataUrl 或 data');
+      return;
+    }
+
+    img.src = dataUrl;
+    img.style.display = 'block';
+    container.classList.remove('hidden');
+
+    if (timeLabel) {
+      const now = new Date();
+      timeLabel.textContent =
+        `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    }
+
+    console.log(`[Focus] Thumbnail updated (${frame.width || '?'}x${frame.height || '?'}, ${dataUrl.length} chars)`);
+  },
+
+  // ── 用户空闲检测 ──
+
+  _startIdleTracking() {
+    this._stopIdleTracking();
+    this.state.focus._lastActivity = Date.now();
+    const handler = () => { this.state.focus._lastActivity = Date.now(); };
+    this.state.focus._idleHandlers = handler;
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => {
+      document.addEventListener(evt, handler, { passive: true });
+    });
+  },
+
+  _stopIdleTracking() {
+    if (this.state.focus._idleHandlers) {
+      ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => {
+        document.removeEventListener(evt, this.state.focus._idleHandlers);
+      });
+      this.state.focus._idleHandlers = null;
+    }
+  },
+
+  _getIdleSeconds() {
+    if (!this.state.focus._lastActivity) return 0;
+    return Math.floor((Date.now() - this.state.focus._lastActivity) / 1000);
+  },
+
+  /**
+   * 启动状态栏计时器
+   */
+  _startFocusTimer() {
+    this._stopFocusTimer();
+    const update = () => {
+      if (!this.state.focus.active) return;
+      const elapsed = Math.floor((Date.now() - this.state.focus.startTime) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const s = String(elapsed % 60).padStart(2, '0');
+      document.getElementById('focusTimer').textContent = `${m}:${s}`;
+    };
+    update();
+    this.state.focus.timerId = setInterval(update, 1000);
+  },
+
+  /**
+   * 停止状态栏计时器
+   */
+  _stopFocusTimer() {
+    if (this.state.focus.timerId) {
+      clearInterval(this.state.focus.timerId);
+      this.state.focus.timerId = null;
+    }
   },
 
   // ── 内部方法 ──
@@ -310,6 +714,21 @@ const App = {
     document.getElementById('stopAllBtn').addEventListener('click', () => this.stopAll());
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
     document.getElementById('privacyBtn').addEventListener('click', () => this.showPrivacyInfo());
+
+    // 专注模式
+    document.getElementById('focusBtn').addEventListener('click', () => {
+      if (this.state.focus.active) {
+        this.stopFocus();
+      } else {
+        this.openFocusSetup();
+      }
+    });
+    document.getElementById('focusStartBtn').addEventListener('click', () => this.startFocus());
+    document.getElementById('focusCancelBtn').addEventListener('click', () => this.closeFocusSetup());
+    // 点击弹窗背景关闭
+    document.getElementById('focusModalOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this.closeFocusSetup();
+    });
   },
 
   _updateInputSources() {
@@ -333,6 +752,16 @@ const App = {
     this._updateButtonState('cameraBtn', this.state.cameraOn, '摄像头', '摄像头');
     this._updateButtonState('screenBtn', this.state.screenShareOn, '屏幕共享', '屏幕共享');
     this._updateButtonState('micBtn', this.state.micOn, '麦克风', '麦克风');
+
+    // 专注按钮状态
+    const focusBtn = document.getElementById('focusBtn');
+    if (this.state.focus.active) {
+      focusBtn.classList.add('active');
+      focusBtn.querySelector('.btn-label').textContent = '⏹ 结束专注';
+    } else {
+      focusBtn.classList.remove('active');
+      focusBtn.querySelector('.btn-label').textContent = '🎯 开始专注';
+    }
 
     // 录音按钮
     const recordBtn = document.getElementById('recordBtn');

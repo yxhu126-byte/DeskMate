@@ -741,3 +741,354 @@ body {
     max-width: 95%;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   专注陪伴模式 (Focus Companion) 样式
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 专注按钮 ── */
+.focus-btn {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px dashed var(--color-warning);
+  transition: all 0.3s ease;
+}
+
+.focus-btn:hover {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: var(--color-warning);
+}
+
+/* ── 专注观察截图缩略图 ── */
+#focusFramePreview {
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-md);
+  overflow: visible;       /* 覆盖 .preview-container 的 overflow:hidden */
+  aspect-ratio: auto;       /* 覆盖 .preview-container 的固定宽高比 */
+  max-height: none;          /* 覆盖 .preview-container 的 max-height */
+  height: auto;
+}
+
+.focus-frame-thumb {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: #111;
+  display: block;
+  border-radius: var(--radius-sm);
+}
+
+/* 专注激活态 — 脉冲呼吸动画 */
+.focus-btn.active {
+  background: rgba(251, 191, 36, 0.18);
+  border: 2px solid var(--color-warning);
+  color: var(--color-warning);
+  font-weight: 600;
+  animation: focus-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.25);
+}
+
+@keyframes focus-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.2);
+    border-color: var(--color-warning);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(251, 191, 36, 0.5);
+    border-color: #f59e0b;
+  }
+}
+
+/* ── 专注模式激活时 — 页面顶部暖色提示条 ── */
+body.focus-mode-active .app-container {
+  border-top: 3px solid var(--color-warning);
+}
+
+body.focus-mode-active .top-bar {
+  background: linear-gradient(135deg, var(--color-surface) 0%, rgba(251, 191, 36, 0.06) 100%);
+}
+
+/* ── 弹窗背景 ── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+/* ── 弹窗面板 ── */
+.modal-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.modal-panel h3 {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+
+.modal-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 18px;
+}
+
+.focus-setup-panel {
+  max-width: 480px;
+}
+
+/* ── 设置面板字段 ── */
+.focus-field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.focus-field span {
+  display: block;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.focus-task-input {
+  width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.focus-task-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.focus-duration-select {
+  width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.focus-duration-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* ── 弹窗操作按钮 ── */
+.focus-setup-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.focus-setup-actions .action-btn {
+  flex: 1;
+  padding: 10px 16px;
+  text-align: center;
+}
+
+.focus-start-btn {
+  background: var(--color-warning) !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+.focus-start-btn:hover {
+  background: #f59e0b !important;
+}
+
+/* ── 系统消息（专注开启/结束等） ── */
+.message-system {
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.message-system .message-content {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  max-width: 85%;
+}
+
+.message-system .message-text p {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* ── 专注提醒消息（走神告警） ── */
+.message-focus-alert .message-content {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid var(--color-warning);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 12px 16px;
+}
+
+.message-focus-alert .message-avatar {
+  font-size: 20px;
+}
+
+.message-focus-alert .message-role {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+/* ── 专注简报卡片 ── */
+.message-focus-report {
+  justify-content: center;
+}
+
+.report-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  max-width: 500px;
+  width: 100%;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.report-icon { font-size: 24px; }
+
+.report-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.report-task {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-left: auto;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 统计条 ── */
+.report-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.report-stat {
+  flex: 1;
+  text-align: center;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.report-stat.focused { border-top: 3px solid var(--color-success); }
+.report-stat.distracted { border-top: 3px solid var(--color-warning); }
+.report-stat.away { border-top: 3px solid var(--color-text-secondary); }
+
+.stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+/* ── 简报分区 ── */
+.report-section {
+  margin-top: 14px;
+}
+
+.report-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.report-text {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* ── 时间线 ── */
+.report-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.report-timeline-icon { font-size: 14px; }
+.report-timeline-time { color: var(--color-text-secondary); min-width: 90px; }
+.report-timeline-status { color: var(--color-text); font-weight: 500; min-width: 36px; }
+.report-timeline-note { color: var(--color-text-secondary); font-size: 11px; }
+
+.report-timeline-empty {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  padding: 8px;
+}
+
+/* ── 建议列表 ── */
+.report-suggestions {
+  list-style: none;
+  padding: 0;
+}
+
+.report-suggestions li {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+}
+
+.report-suggestions li::before {
+  content: '•';
+  position: absolute;
+  left: 4px;
+  color: var(--color-primary);
+}

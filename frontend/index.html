@@ -33,6 +33,11 @@
         <span>麦克风: <span id="micStatus" class="status-off">关闭</span></span>
       </div>
       <span style="color:#444;">|</span>
+      <div class="status-item" id="focusStatusBarItem" style="display:none;">
+        <span class="status-dot active" style="background:var(--color-warning);"></span>
+        <span>🎯 专注中 · <span id="focusStatusText">--</span> · <span id="focusTimer">00:00</span> · 已观察 <span id="focusTickCount">0</span> 次</span>
+      </div>
+      <span style="color:#444;">|</span>
       <span class="last-sources" id="lastUsedSources"></span>
     </div>
   </header>
@@ -87,6 +92,12 @@
 
         <!-- 停止全部 -->
         <button class="stop-all-btn" id="stopAllBtn">🛑 全部停止</button>
+
+        <!-- 专注陪伴 -->
+        <button class="control-btn focus-btn" id="focusBtn">
+          <span class="btn-icon">🎯</span>
+          <span class="btn-label">开始专注</span>
+        </button>
       </div>
 
       <!-- 预览区域 -->
@@ -103,6 +114,12 @@
         <div class="preview-container hidden" id="cameraPreview">
           <video id="cameraVideo" autoplay muted playsinline></video>
           <span class="preview-label">📷 摄像头</span>
+        </div>
+
+        <!-- 专注观察截图预览 -->
+        <div class="preview-container hidden" id="focusFramePreview">
+          <img id="focusFrameThumb" src="" alt="AI 观察画面" class="focus-frame-thumb">
+          <span class="preview-label">🔍 AI 观察画面 <span id="focusFrameTime">--</span></span>
         </div>
 
         <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;padding:10px;">
@@ -154,6 +171,49 @@
       </div>
     </main>
 
+  </div>
+</div>
+
+<!-- ═══════════════ 专注模式设置弹窗 ═══════════════ -->
+<div class="modal-overlay hidden" id="focusModalOverlay">
+  <div class="modal-panel focus-setup-panel">
+    <h3>🎯 开始专注</h3>
+    <p class="modal-desc">告诉 AI 你的任务计划，它会在你走神时温和提醒你</p>
+
+    <label class="focus-field">
+      <span>任务描述</span>
+      <textarea
+        id="focusTaskInput"
+        class="focus-task-input"
+        rows="3"
+        placeholder="例如：写完数据库模块的 CRUD 接口，完成单元测试"
+      ></textarea>
+    </label>
+
+    <label class="focus-field">
+      <span>预计时长</span>
+      <select id="focusDurationSelect" class="focus-duration-select">
+        <option value="15">15 分钟</option>
+        <option value="25">25 分钟（番茄钟）</option>
+        <option value="30" selected>30 分钟</option>
+        <option value="45">45 分钟</option>
+        <option value="60">60 分钟</option>
+      </select>
+    </label>
+
+    <label class="focus-field">
+      <span>观察频率</span>
+      <select id="focusFrequencySelect" class="focus-duration-select">
+        <option value="15">每 15 秒（高频）</option>
+        <option value="30" selected>每 30 秒（推荐）</option>
+        <option value="60">每 60 秒（省电）</option>
+      </select>
+    </label>
+
+    <div class="focus-setup-actions">
+      <button class="action-btn" id="focusCancelBtn">取消</button>
+      <button class="action-btn focus-start-btn" id="focusStartBtn">开始专注</button>
+    </div>
   </div>
 </div>
 

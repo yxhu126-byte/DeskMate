@@ -303,4 +303,260 @@ class MultimodalAIService:
         return suggestions
 
 
+    # ══════════════════════════════════════════════════════════
+    # 专注陪伴模式 (Focus Companion) — AI 方法
+    # ══════════════════════════════════════════════════════════
+
+    async def focus_check_relevance(
+        self, task: str, image_base64: str, page_title: Optional[str] = None
+    ) -> dict:
+        """
+        调用 AI 判断屏幕截图是否与用户任务相关。
+
+        Returns:
+            {"related": bool, "activity": str, "confidence": float}
+        """
+        title_hint = f"页面标题: {page_title}" if page_title else ""
+
+        prompt = f"""用户设定的任务: "{task}"
+{title_hint}
+
+请判断这张屏幕截图的内容是否与用户任务相关:
+1. 截图显示用户在做什么？
+2. 这跟「{task}」有关系吗？
+
+用 JSON 回答（仅 JSON，无其他文字）:
+{{"related": true或false, "activity": "简短描述(10字以内)", "confidence": 0.0到1.0}}
+
+注意: 查资料/看文档/搜索技术问题 → related=true; 社交媒体/视频/游戏/购物 → related=false; 看不清 → related=true"""
+
+        if self._provider == "mock":
+            return await self._mock_focus_relevance(image_base64, page_title)
+
+        try:
+            if self._provider == "anthropic":
+                return await self._call_anthropic_focus_relevance(prompt, image_base64)
+            elif self._provider == "openai":
+                return await self._call_openai_focus_relevance(prompt, image_base64)
+        except Exception as e:
+            logger.error(f"Focus relevance check failed: {e}, falling back to rules")
+            return await self._mock_focus_relevance(image_base64, page_title)
+
+        return await self._mock_focus_relevance(image_base64, page_title)
+
+    async def focus_generate_alert(
+        self, task: str, elapsed_minutes: int, current_activity: str,
+        distracted_minutes: int
+    ) -> str:
+        """
+        调用 AI 生成走神提醒文案。
+
+        Returns:
+            提醒文本（不超过 40 字）
+        """
+        prompt = f"""用户任务: "{task}"
+已进行: {elapsed_minutes} 分钟
+用户当前在: {current_activity}（与任务不相关）
+已连续偏离: 约 {distracted_minutes} 分钟
+
+请用一句话温和提醒用户回到任务。要求:
+- 朋友式关心，不指责
+- 不使用"你又在摸鱼""总是分心"等负面表达
+- 可以带一点幽默感，但不轻浮
+- 不超过 40 个字
+- 仅输出提醒文本，无其他内容"""
+
+        if self._provider == "mock":
+            return self._mock_focus_alert(task, current_activity)
+
+        try:
+            if self._provider == "anthropic":
+                response = await self._call_anthropic_simple(prompt)
+            elif self._provider == "openai":
+                response = await self._call_openai_simple(prompt)
+            else:
+                response = self._mock_focus_alert(task, current_activity)
+            return response.strip()[:120]  # 安全截断
+        except Exception as e:
+            logger.error(f"Focus alert generation failed: {e}")
+            return self._mock_focus_alert(task, current_activity)
+
+    async def focus_generate_report(
+        self, task: str, total_min: int, focused_min: int,
+        distracted_min: int, away_min: int, timeline_text: str
+    ) -> dict:
+        """
+        调用 AI 生成专注简报。
+
+        Returns:
+            {"completion_assessment": str, "summary": str, "suggestions": list[str]}
+        """
+        prompt = f"""用户任务: "{task}"
+总时长: {total_min} 分钟
+专注: {focused_min} 分钟 | 走神: {distracted_min} 分钟 | 离开: {away_min} 分钟
+
+时间线:
+{timeline_text}
+
+请生成一份任务简报。用 JSON 回答（仅 JSON）:
+{{"completion_assessment": "任务完成度评估(1-2句)",
+  "summary": "专注情况总结(1-2句)",
+  "suggestions": ["建议1", "建议2"]}}
+
+要求: 温暖鼓励; 如果专注度好要真诚表扬; 如果走神多要温和给建议。"""
+
+        if self._provider == "mock":
+            return self._mock_focus_report(task, total_min, focused_min, distracted_min, away_min)
+
+        try:
+            if self._provider == "anthropic":
+                result_text = await self._call_anthropic_simple(prompt)
+            elif self._provider == "openai":
+                result_text = await self._call_openai_simple(prompt)
+            else:
+                return self._mock_focus_report(task, total_min, focused_min, distracted_min, away_min)
+
+            # Parse JSON from AI response
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', result_text)
+            if json_match:
+                result = json.loads(json_match.group())
+                return {
+                    "completion_assessment": result.get("completion_assessment", ""),
+                    "summary": result.get("summary", ""),
+                    "suggestions": result.get("suggestions", []),
+                }
+        except Exception as e:
+            logger.error(f"Focus report generation failed: {e}")
+
+        return self._mock_focus_report(task, total_min, focused_min, distracted_min, away_min)
+
+    # ── AI 提供商实现 ──
+
+    async def _call_anthropic_focus_relevance(self, prompt: str, image_base64: str) -> dict:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_base64}},
+        ]
+        response = await client.messages.create(
+            model=settings.ANTHROPIC_MODEL, max_tokens=256,
+            messages=[{"role": "user", "content": content}],
+        )
+        return self._parse_relevance_json(response.content[0].text)
+
+    async def _call_openai_focus_relevance(self, prompt: str, image_base64: str) -> dict:
+        import openai
+        client = openai.AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
+        )
+        response = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL, max_tokens=256,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_base64}", "detail": "low"
+                }},
+            ]}],
+        )
+        return self._parse_relevance_json(response.choices[0].message.content)
+
+    async def _call_anthropic_simple(self, prompt: str) -> str:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        response = await client.messages.create(
+            model=settings.ANTHROPIC_MODEL, max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text
+
+    async def _call_openai_simple(self, prompt: str) -> str:
+        import openai
+        client = openai.AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
+        )
+        response = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL, max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content
+
+    def _parse_relevance_json(self, text: str) -> dict:
+        """安全解析 AI 返回的 relevance JSON"""
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', text)
+        if json_match:
+            try:
+                result = json.loads(json_match.group())
+                return {
+                    "related": bool(result.get("related", True)),
+                    "activity": str(result.get("activity", ""))[:20],
+                    "confidence": float(result.get("confidence", 0.5)),
+                }
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+        # 解析失败 → 默认 related=true（不误判）
+        return {"related": True, "activity": "无法判断", "confidence": 0.5}
+
+    # ── Mock 降级实现 ──
+
+    async def _mock_focus_relevance(self, image_base64: str, page_title: Optional[str]) -> dict:
+        """Mock 模式: 使用关键词规则判断"""
+        if not page_title:
+            return {"related": True, "activity": "工作中", "confidence": 0.5}
+
+        DISTRACTION_KW = [
+            "视频", "游戏", "直播", "微博", "知乎", "贴吧", "抖音",
+            "bilibili", "B站", "youtube", "YouTube", "netflix",
+            "漫画", "小说", "购物", "淘宝", "京东",
+        ]
+        for kw in DISTRACTION_KW:
+            if kw.lower() in page_title.lower():
+                return {"related": False, "activity": page_title[:20], "confidence": 0.8}
+
+        return {"related": True, "activity": page_title[:20], "confidence": 0.6}
+
+    def _mock_focus_alert(self, task: str, current_activity: str) -> str:
+        """Mock 模式: 模板化提醒文案"""
+        task_brief = task[:15] + "..." if len(task) > 15 else task
+        return f"看起来你去「{current_activity}」了——「{task_brief}」还在等你呢，要回来继续吗？💪"
+
+    def _mock_focus_report(
+        self, task: str, total_min: int, focused_min: int,
+        distracted_min: int, away_min: int
+    ) -> dict:
+        """Mock 模式: 模板化简报"""
+        pct = round(focused_min / max(1, total_min) * 100)
+        if pct >= 80:
+            assessment = f"表现优秀！{total_min} 分钟里 {pct}% 都在专注，任务推进很扎实。"
+        elif pct >= 60:
+            assessment = f"整体不错，{pct}% 的时间在专注任务。"
+        else:
+            assessment = f"这次专注度偏低，{pct}% 时间在任务上，可以试试减少干扰。"
+
+        summary_parts = [f"在 {total_min} 分钟的专注时段中，你保持了 {focused_min} 分钟的专注。"]
+        if distracted_min > 0:
+            summary_parts.append(f"中间有 {distracted_min} 分钟走神。")
+        if away_min > 0:
+            summary_parts.append(f"离开了 {away_min} 分钟。")
+
+        suggestions = []
+        if distracted_min > 5:
+            suggestions.append("开始专注前，先关闭容易分心的网页和应用")
+        if away_min > 5:
+            suggestions.append("可以试试番茄工作法：25 分钟专注 + 5 分钟休息")
+        if pct >= 80:
+            suggestions.append("专注度很棒，继续保持这个节奏！🎉")
+        suggestions.append("试试在开始前把手机放到另一个房间")
+
+        return {
+            "completion_assessment": assessment,
+            "summary": "".join(summary_parts),
+            "suggestions": suggestions,
+        }
+
+
 multimodal_ai_service = MultimodalAIService()

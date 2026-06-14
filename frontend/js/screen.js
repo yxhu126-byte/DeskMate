@@ -78,6 +78,7 @@ const ScreenShareManager = {
       type: 'screen',
       mime_type: 'image/jpeg',
       data: result.data,
+      dataUrl: result.dataUrl,
       width: result.width,
       height: result.height,
       sizeBytes: result.sizeBytes,
