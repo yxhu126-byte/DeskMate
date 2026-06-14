@@ -604,15 +604,29 @@ const App = {
     const container = document.getElementById('focusFramePreview');
     const img = document.getElementById('focusFrameThumb');
     const timeLabel = document.getElementById('focusFrameTime');
-    if (container && img && frame.dataUrl) {
-      img.src = frame.dataUrl;
-      container.classList.remove('hidden');
-      if (timeLabel) {
-        const now = new Date();
-        timeLabel.textContent =
-          `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-      }
+    if (!container || !img) return;
+
+    // 确保 dataUrl 一定存在（兼容缓存 / 兜底）
+    let dataUrl = frame.dataUrl;
+    if (!dataUrl && frame.data) {
+      dataUrl = `data:${frame.mime_type || 'image/jpeg'};base64,${frame.data}`;
     }
+    if (!dataUrl) {
+      console.warn('[Focus] 缩略图: frame 中没有 dataUrl 或 data');
+      return;
+    }
+
+    img.src = dataUrl;
+    img.style.display = 'block';
+    container.classList.remove('hidden');
+
+    if (timeLabel) {
+      const now = new Date();
+      timeLabel.textContent =
+        `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    }
+
+    console.log(`[Focus] Thumbnail updated (${frame.width || '?'}x${frame.height || '?'}, ${dataUrl.length} chars)`);
   },
 
   // ── 用户空闲检测 ──

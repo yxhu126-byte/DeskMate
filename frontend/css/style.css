@@ -763,15 +763,19 @@ body {
 #focusFramePreview {
   border: 1px solid rgba(251, 191, 36, 0.3);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;       /* 覆盖 .preview-container 的 overflow:hidden */
+  aspect-ratio: auto;       /* 覆盖 .preview-container 的固定宽高比 */
+  max-height: none;          /* 覆盖 .preview-container 的 max-height */
+  height: auto;
 }
 
 .focus-frame-thumb {
   width: 100%;
-  max-height: 150px;
+  max-height: 220px;
   object-fit: contain;
-  background: #000;
+  background: #111;
   display: block;
+  border-radius: var(--radius-sm);
 }
 
 /* 专注激活态 — 脉冲呼吸动画 */
