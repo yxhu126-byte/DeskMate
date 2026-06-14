@@ -4,6 +4,14 @@
 
 ---
 
+## 🎬 Demo 演示视频
+
+> 📺 **点击观看 DeskMate V1 功能演示**：[![Bilibili](https://img.shields.io/badge/Bilibili-DeskMate%20Demo-blue?logo=bilibili)](https://www.bilibili.com/video/BV1f1JK6eE2X/)
+
+🔗 视频链接：https://www.bilibili.com/video/BV1f1JK6eE2X/
+
+---
+
 ## 项目概述
 
 DeskMate 是一个运行在网页中的 AI 多模态伴随助手。用户主动授权摄像头、麦克风和屏幕共享后，AI 能够：
