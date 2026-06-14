@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import chat, speech, health
+from app.routers import chat, speech, health, focus
 
 # ── 日志配置 ──
 # Windows 环境下强制 UTF-8 编码，避免 emoji 和中文导致的 UnicodeEncodeError
@@ -58,6 +58,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(speech.router)
 app.include_router(health.router)
+app.include_router(focus.router)
 
 
 # ── 根路径 ──
